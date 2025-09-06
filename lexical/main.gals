@@ -1,0 +1,106 @@
+#Options
+GenerateScanner = true
+GenerateParser = true
+Language = Java
+ScannerName = Lexico
+ParserName = Sintatico
+SemanticName = Semantico
+ScannerCaseSensitive = true
+ScannerTable = Full
+Input = String
+Parser = SLR
+#RegularDefinitions
+
+#Tokens
+// PRIMITIVOS
+KEY_VARIABLE: [a-zA-Z_][a-zA-Z0-9_]*
+KEY_DECIMAL: [0-9]+\.[0-9]+
+KEY_INTEGER: [0-9]+
+KEY_BINARY: "0b"[01]+
+KEY_HEXADECIMAL: "0x"[0-9a-fA-F]+
+KEY_STRING: \"([^\"\\]|\\.|[\n\r])*\"
+KEY_CHARACTER: '(\\.|[^'\\])'
+
+// PALAVRAS RESERVADAS
+KEY_TYPE_INT = KEY_VARIABLE:"int"
+KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
+KEY_TYPE_STRING = KEY_VARIABLE:"string"
+KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
+KEY_TYPE_CHAR = KEY_VARIABLE:"char"
+KEY_IF = KEY_VARIABLE:"if"
+KEY_ELSE = KEY_VARIABLE:"else"
+KEY_ELIF = KEY_VARIABLE:"elif"
+KEY_DO = KEY_VARIABLE:"do"
+KEY_WHILE = KEY_VARIABLE:"while"
+KEY_FOR = KEY_VARIABLE:"for"
+KEY_RETURN = KEY_VARIABLE:"return"
+KEY_FUNCTION = KEY_VARIABLE:"function"
+KEY_CONST = KEY_VARIABLE:"const"
+KEY_VAR = KEY_VARIABLE:"var"
+KEY_SWITCH = KEY_VARIABLE:"switch"
+KEY_CASE = KEY_VARIABLE:"case"
+KEY_BREAK = KEY_VARIABLE:"break"
+KEY_DEFAULT = KEY_VARIABLE:"default"
+KEY_TRY = KEY_VARIABLE:"try"
+KEY_CATCH = KEY_VARIABLE:"catch"
+KEY_FINALLY = KEY_VARIABLE:"finally"
+KEY_THROW = KEY_VARIABLE:"throw"
+KEY_CONTINUE = KEY_VARIABLE:"continue"
+KEY_TRUE = KEY_VARIABLE:"true"
+KEY_FALSE = KEY_VARIABLE:"false"
+KEY_OBJECT = KEY_VARIABLE:"object"
+KEY_VOID = KEY_VARIABLE:"void"
+
+// COMENTARIOS
+KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
+KEY_COMMENT_LINE: ["/"]["/"][^\r\n]*
+ 
+// OPERADORES ARITMETICOS
+KEY_SUM: \+
+KEY_SUB: \-
+KEY_MULT: \*
+KEY_DIV: /
+KEY_MOD: "%"
+KEY_EXPO: "**"
+KEY_INCREMENT: "++"
+KEY_DECREMENT: "--"
+KEY_ATTR: =
+
+// OPERADORES LOGICOS
+KEY_OR: "||"
+KEY_AND: "&&"
+KEY_NOT: "!"+
+
+// OPERADORES RELACIONAIS
+KEY_GREATER: ">"
+KEY_LESSER: "<"
+KEY_GREATER_EGUAL: ">="
+KEY_LESSER_EGUAL: "<="
+KEY_EQUAL: "=="
+KEY_NOT_EQUAL: "!="
+
+// OPERADORES BIT A BIT
+KEY_BIT_SR: ">>"
+KEY_BIT_SL: "<<"
+KEY_BIT_AND: "&"
+KEY_BIT_OR: "|"
+KEY_NEGACAO: "!"
+KEY_BIT_XOR: \^
+KEY_BIT_NOT: "~"
+
+// DELIMITADORES E PONTUADORES
+KEY_DOT: "."
+KEY_COMMA: ","
+KEY_SEMICOLON: ";"
+KEY_COLON: ":"
+KEY_LPAREN: "("
+KEY_RPAREN: ")"
+KEY_LBRACKET: "["
+KEY_RBRACKET: "]"
+KEY_LBRACE: "{"
+KEY_RBRACE: "}"
+ 
+:[\s\n\t\r]*
+#NonTerminals
+
+#Grammar
