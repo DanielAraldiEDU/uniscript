@@ -108,9 +108,11 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<if>
+<dowhile>
+<while>
 <else>
 <elif>
+<if>
 <commands>
 <command>
 <exp>
@@ -130,7 +132,16 @@ KEY_RBRACE: "}"
 <op_arit_baixa>
 <op_arit_alta>
 #Grammar
-// TODO: Entender porque quando dois ou mais bloco condicionais (if e depois outro if...) dão erro de fim de sentança
+// TODO: 
+// Entender porque quando dois ou mais bloco condicionais (if e depois outro if...) dão erro de fim de sentança.
+// O mesmo está acontecendo para os loops.
+
+// TODO: Tem que fazer o for
+<while> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN <commands>
+  | KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE;
+<dowhile> ::= KEY_DO <commands> <while>
+  | KEY_DO KEY_LBRACE <commands> KEY_RBRACE <while>;
+
 <else> ::= KEY_ELSE <commands>
   | KEY_ELSE KEY_LBRACE <commands> KEY_RBRACE;
 <elif> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands>
