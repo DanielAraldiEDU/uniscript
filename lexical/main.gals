@@ -33,7 +33,9 @@ KEY_TYPE_INT = KEY_VARIABLE:"int"
 KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
 KEY_TYPE_STRING = KEY_VARIABLE:"string"
 KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
-KEY_TYPE_CHAR = KEY_VARIABLE:"char"
+KEY_TYPE_FUNC = KEY_VARIABLE:"func"
+KEY_TYPE_OBJECT = KEY_VARIABLE:"object"
+KEY_TYPE_VOID = KEY_VARIABLE:"void"
 KEY_IF = KEY_VARIABLE:"if"
 KEY_ELSE = KEY_VARIABLE:"else"
 KEY_ELIF = KEY_VARIABLE:"elif"
@@ -55,8 +57,6 @@ KEY_THROW = KEY_VARIABLE:"throw"
 KEY_CONTINUE = KEY_VARIABLE:"continue"
 KEY_TRUE = KEY_VARIABLE:"true"
 KEY_FALSE = KEY_VARIABLE:"false"
-KEY_OBJECT = KEY_VARIABLE:"object"
-KEY_VOID = KEY_VARIABLE:"void"
 
 // COMENTÁRIOS
 KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
@@ -108,8 +108,14 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<dowhile>
+<function>
+<primitivetype>
+<complextype>
+<type>
+<param>
+<params>
 <while>
+<dowhile>
 <else>
 <elif>
 <if>
@@ -135,6 +141,18 @@ KEY_RBRACE: "}"
 // TODO: 
 // Entender porque quando dois ou mais bloco condicionais (if e depois outro if...) dão erro de fim de sentança.
 // O mesmo está acontecendo para os loops.
+// O mesmo está acontecendo para as funções.
+
+<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_OBJECT | KEY_TYPE_VOID;
+<complextype> ::= <primitivetype> KEY_LBRACKET KEY_RBRACKET;
+<type> ::= <primitivetype> | <complextype>;
+<param> ::= KEY_VARIABLE KEY_COLON <type>
+  | KEY_VARIABLE KEY_COLON <type> KEY_COMMA <param>;
+<params> ::= <param> <params> | <param>;
+<function> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON <type> KEY_LBRACE KEY_RBRACE
+  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON <type> KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON <type> KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON <type> KEY_LBRACE KEY_RBRACE;
 
 // TODO: Tem que fazer o for
 <while> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN <commands>
