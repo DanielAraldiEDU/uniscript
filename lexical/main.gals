@@ -110,6 +110,7 @@ KEY_RBRACE: "}"
 #NonTerminals
 <if>
 <else>
+<elif>
 <commands>
 <command>
 <exp>
@@ -129,12 +130,19 @@ KEY_RBRACE: "}"
 <op_arit_baixa>
 <op_arit_alta>
 #Grammar
+// TODO: Entender porque quando dois ou mais bloco condicionais (if e depois outro if...) dão erro de fim de sentança
 <else> ::= KEY_ELSE <commands>
   | KEY_ELSE KEY_LBRACE <commands> KEY_RBRACE;
+<elif> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands>
+  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
+  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>;
 <if> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <elif>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>;
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <elif>;
 
 <commands> ::= <command> <commands> | <command>;
 <command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
