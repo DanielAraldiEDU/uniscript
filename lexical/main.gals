@@ -108,17 +108,17 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<function>
+<if>
 <primitivetype>
 <complextype>
 <type>
 <param>
 <params>
+<function>
 <while>
 <dowhile>
 <else>
 <elif>
-<if>
 <commands>
 <command>
 <exp>
@@ -161,16 +161,22 @@ KEY_RBRACE: "}"
   | KEY_DO KEY_LBRACE <commands> KEY_RBRACE <while>;
 
 <else> ::= KEY_ELSE <commands>
+  | KEY_ELSE KEY_LBRACE KEY_RBRACE
   | KEY_ELSE KEY_LBRACE <commands> KEY_RBRACE;
 <elif> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands>
   | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
+  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE
   | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <else>
   | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>;
 <if> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <elif>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <else>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <elif>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <elif>;
 
 <commands> ::= <command> <commands> | <command>;
