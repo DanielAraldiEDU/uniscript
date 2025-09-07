@@ -14,6 +14,12 @@ d:[0-9]
 l:[a-zA-Z]
 w:[\ \t\n\s\r]
 #Tokens
+: {w}+
+
+// ENTRADA E SAÍDA
+KEY_PRINT: "print"
+KEY_READ: "read"
+
 // PRIMITIVOS
 KEY_VARIABLE: {l}({l}|{d}|"_")*
 KEY_DECIMAL: {d}+\.{d}+
@@ -21,7 +27,6 @@ KEY_INTEGER: {d}+
 KEY_BINARY: "0b"[01]+
 KEY_HEXADECIMAL: "0x"[0-9a-fA-F]+
 KEY_STRING: \"([^\"\\]|\\.|[\n\r])*\"
-KEY_CHARACTER: '(\\.|[^'\\])'
 
 // PALAVRAS RESERVADAS
 KEY_TYPE_INT = KEY_VARIABLE:"int"
@@ -53,11 +58,11 @@ KEY_FALSE = KEY_VARIABLE:"false"
 KEY_OBJECT = KEY_VARIABLE:"object"
 KEY_VOID = KEY_VARIABLE:"void"
 
-// COMENTARIOS
+// COMENTÁRIOS
 KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
 KEY_COMMENT_LINE: ["/"]["/"][^\r\n]*
  
-// OPERADORES ARITMETICOS
+// OPERADORES ARITMÉTICOS
 KEY_SUM: \+
 KEY_SUB: \-
 KEY_MULT: \*
@@ -68,7 +73,7 @@ KEY_INCREMENT: "++"
 KEY_DECREMENT: "--"
 KEY_ATTR: =
 
-// OPERADORES LOGICOS
+// OPERADORES LÓGICOS
 KEY_OR: "||"
 KEY_AND: "&&"
 KEY_NOT: "!"
@@ -101,9 +106,12 @@ KEY_LBRACKET: "["
 KEY_RBRACKET: "]"
 KEY_LBRACE: "{"
 KEY_RBRACE: "}"
- 
-: {w}+
+
 #NonTerminals
+<if>
+<else>
+<commands>
+<command>
 <exp>
 <exp1>
 <exp2>
@@ -114,13 +122,25 @@ KEY_RBRACE: "}"
 <exp7>
 <exp8>
 <exp9>
-<exp10>
+<value>
 <op_rel>
 <op_neg>
 <op_bitwise>
 <op_arit_baixa>
 <op_arit_alta>
 #Grammar
+<else> ::= KEY_ELSE <commands>
+  | KEY_ELSE KEY_LBRACE <commands> KEY_RBRACE;
+<if> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
+  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>;
+
+<commands> ::= <command> <commands> | <command>;
+<command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
+  | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON; // Terá que adicionar mais comandos aqui (acredito eu)
+  
+// Exemplo para testar tudo: -x + 8.8 - !x * 2 / ~y % 3 << 7 != y >> 3 || (x <= 3 && y > 8) | p & (h ^ g)
 <exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
 <exp1> ::= <exp1> KEY_AND <exp2> | <exp2>;
 <exp2> ::= <exp2> KEY_BIT_OR <exp3> | <exp3>;
@@ -130,15 +150,12 @@ KEY_RBRACE: "}"
 <exp6> ::= <exp6> <op_bitwise> <exp7> | <exp7>;
 <exp7> ::= <exp7> <op_arit_baixa> <exp8> | <exp8>;
 <exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
-<exp9> ::= <op_neg> <exp10> | <exp10>;
-<exp10> ::= KEY_INTEGER | KEY_DECIMAL | KEY_VARIABLE | KEY_LPAREN <exp> KEY_RPAREN;
+<exp9> ::= <op_neg> <value> | <value>;
 
-<op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_GREATER_EGUAL | KEY_LESSER_EGUAL | KEY_ATTR | KEY_NOT_EQUAL; 
+<value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_LPAREN <exp> KEY_RPAREN;
+
+<op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EGUAL | KEY_LESSER_EGUAL | KEY_ATTR | KEY_NOT_EQUAL; 
 <op_neg> ::= KEY_SUB | KEY_BIT_NOT | KEY_NOT;
 <op_bitwise> ::= KEY_BIT_SL | KEY_BIT_SR;
 <op_arit_baixa> ::= KEY_SUM | KEY_SUB;
 <op_arit_alta> ::= KEY_MULT | KEY_DIV | KEY_MOD;
-
-
-//Exemplo com tudo para ser usado no simulador
-// -x + 8.8 - !x * 2 / ~y % 3 << 7 != y >> 3 || (x <= 3 && y > 8) | p & (h ^ g)
