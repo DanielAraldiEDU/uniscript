@@ -45,7 +45,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   statusBar()->showMessage(QStringLiteral("Pronto"));
 
+  cursorPosLabel = new QLabel(this);
+  cursorPosLabel->setText(QStringLiteral("Linha 1, Coluna 1"));
+  statusBar()->addPermanentWidget(cursorPosLabel);
+
   editor->setPlainText("while (x < 10){read(x);}\n");
+
+
+  connect(editor, &QPlainTextEdit::cursorPositionChanged, this, [this]() {
+    const auto cursor = editor->textCursor();
+    const int line = cursor.blockNumber() + 1;
+    const int col = cursor.positionInBlock() + 1;
+    cursorPosLabel->setText(QString("Linha %1, Coluna %2").arg(line).arg(col));
+  });
+
+  // Contador de linha e coluna baseado no cursor/aonde o usuário está digitando no editor
+  QMetaObject::invokeMethod(editor, [this]() {
+    const auto cursor = editor->textCursor();
+    const int line = cursor.blockNumber() + 1;
+    const int col = cursor.positionInBlock() + 1;
+    cursorPosLabel->setText(QString("Linha %1, Coluna %2").arg(line).arg(col));
+  }, Qt::QueuedConnection);
 
   connect(header->compileButton(), &QPushButton::clicked, this, &MainWindow::compileSource);
 }

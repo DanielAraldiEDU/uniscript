@@ -3,7 +3,8 @@
 #include <QMainWindow>
 #include <QStatusBar>
 #include <QSplitter>
-
+#include <QLabel>
+//
 #include "components/Header/HeaderBar.h"
 #include "components/Editor/CodeEditor.h"
 #include "components/Console/ConsoleView.h"
@@ -20,4 +21,5 @@ private:
   CodeEditor* editor;
   ConsoleView* console;
   HeaderBar* header;
+  QLabel* cursorPosLabel;
 };
