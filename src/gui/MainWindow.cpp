@@ -99,7 +99,7 @@ void MainWindow::applyDarkTheme() {
     QPushButton:pressed { background-color: #1f2937; }
     QPlainTextEdit { 
       background-color: #0b0b0f; color: #e4e4e7; 
-      border: 1px solid #27272a; border-radius: 8px; padding: 8px; 
+      border: 1px solid #27272a; border-radius: 8px; padding: 8px 8px 8px 0px; 
       selection-background-color: #3b82f6; selection-color: #0a0a0a;
     }
     QStatusBar { color: #a1a1aa; background-color: #18181b; }
