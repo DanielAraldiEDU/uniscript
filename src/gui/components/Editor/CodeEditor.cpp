@@ -6,6 +6,7 @@
 #include <QResizeEvent>
 #include <QTextBlock>
 #include <QTextOption>
+#include <QTextEdit>
 
 CodeEditor::CodeEditor(QWidget* parent) : QPlainTextEdit(parent) {
   QFont monoFont;
@@ -96,4 +97,28 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event) {
   }
 
   // No explicit separator line to match VS Code style
+}
+
+void CodeEditor::clearErrorMarkers() {
+  setExtraSelections({});
+}
+
+void CodeEditor::showErrorAt(int position, int length) {
+  if (length <= 0) length = 1;
+  const int docChars = document()->characterCount();
+  if (docChars <= 1) return;
+
+  QTextCursor c(document());
+  const int start = qBound(0, position, docChars - 1);
+  c.setPosition(start);
+  c.setPosition(qMin(start + length, docChars - 1), QTextCursor::KeepAnchor);
+
+  QTextEdit::ExtraSelection sel;
+  sel.cursor = c;
+  QTextCharFormat fmt;
+  fmt.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+  fmt.setUnderlineColor(QColor("#f87171")); // red underline
+  sel.format = fmt;
+
+  setExtraSelections({sel});
 }

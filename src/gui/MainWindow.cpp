@@ -108,6 +108,7 @@ void MainWindow::applyDarkTheme() {
 
 void MainWindow::compileSource() {
   console->clear();
+  editor->clearErrorMarkers();
   console->appendLog(QStringLiteral("Iniciando análise sintática…"), QColor("#60a5fa")); // blue-400
 
   const QString source = editor->toPlainText();
@@ -129,14 +130,83 @@ void MainWindow::compileSource() {
     console->appendLog(QStringLiteral("Análise concluída com sucesso!"), QColor("#34d399"));
     statusBar()->showMessage(QStringLiteral("Compilado com sucesso"));
   } catch (const LexicalError& err) {
-    console->appendLog(QString("Problema léxico: %1").arg(QString::fromUtf8(err.getMessage())), QColor("#f87171"));
-    statusBar()->showMessage(QStringLiteral("Erro léxico"));
+    const int pos = err.getPosition();
+    int lineNo = -1, colNo = -1;
+    if (pos >= 0) {
+      QTextCursor tc(editor->document());
+      const int docChars = editor->document()->characterCount();
+      tc.setPosition(qBound(0, pos, docChars - 1));
+      lineNo = tc.blockNumber() + 1;
+      colNo = tc.positionInBlock() + 1;
+    }
+    const auto msg = (lineNo > 0)
+      ? QString("Problema léxico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema léxico: %1").arg(QString::fromUtf8(err.getMessage()));
+    console->appendLog(msg, QColor("#f87171"));
+    if (pos >= 0) {
+      int start = pos;
+      int end = pos;
+      auto isWordChar = [&](QChar ch){ return ch.isLetterOrNumber() || ch == QChar('_'); };
+      while (start > 0 && isWordChar(source.at(start - 1))) --start;
+      while (end < source.size() && isWordChar(source.at(end))) ++end;
+      const int len = qMax(1, end - start);
+      editor->showErrorAt(start, len);
+    }
+    statusBar()->showMessage((lineNo > 0)
+      ? QString("Erro léxico na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro léxico"));
   } catch (const SyntacticError& err) {
-    console->appendLog(QString("Problema sintático: %1").arg(QString::fromUtf8(err.getMessage())), QColor("#f87171"));
-    statusBar()->showMessage(QStringLiteral("Erro sintático"));
+    const int pos = err.getPosition();
+    int lineNo = -1, colNo = -1;
+    if (pos >= 0) {
+      QTextCursor tc(editor->document());
+      const int docChars = editor->document()->characterCount();
+      tc.setPosition(qBound(0, pos, docChars - 1));
+      lineNo = tc.blockNumber() + 1;
+      colNo = tc.positionInBlock() + 1;
+    }
+    const auto msg = (lineNo > 0)
+      ? QString("Problema sintático (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema sintático: %1").arg(QString::fromUtf8(err.getMessage()));
+    console->appendLog(msg, QColor("#f87171"));
+    if (pos >= 0) {
+      int start = pos;
+      int end = pos;
+      auto isWordChar = [&](QChar ch){ return ch.isLetterOrNumber() || ch == QChar('_'); };
+      while (start > 0 && isWordChar(source.at(start - 1))) --start;
+      while (end < source.size() && isWordChar(source.at(end))) ++end;
+      const int len = qMax(1, end - start);
+      editor->showErrorAt(start, len);
+    }
+    statusBar()->showMessage((lineNo > 0)
+      ? QString("Erro sintático na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro sintático"));
   } catch (const SemanticError& err) {
-    console->appendLog(QString("Problema semântico: %1").arg(QString::fromUtf8(err.getMessage())), QColor("#f87171"));
-    statusBar()->showMessage(QStringLiteral("Erro semântico"));
+    const int pos = err.getPosition();
+    int lineNo = -1, colNo = -1;
+    if (pos >= 0) {
+      QTextCursor tc(editor->document());
+      const int docChars = editor->document()->characterCount();
+      tc.setPosition(qBound(0, pos, docChars - 1));
+      lineNo = tc.blockNumber() + 1;
+      colNo = tc.positionInBlock() + 1;
+    }
+    const auto msg = (lineNo > 0)
+      ? QString("Problema semântico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema semântico: %1").arg(QString::fromUtf8(err.getMessage()));
+    console->appendLog(msg, QColor("#f87171"));
+    if (pos >= 0) {
+      int start = pos;
+      int end = pos;
+      auto isWordChar = [&](QChar ch){ return ch.isLetterOrNumber() || ch == QChar('_'); };
+      while (start > 0 && isWordChar(source.at(start - 1))) --start;
+      while (end < source.size() && isWordChar(source.at(end))) ++end;
+      const int len = qMax(1, end - start);
+      editor->showErrorAt(start, len);
+    }
+    statusBar()->showMessage((lineNo > 0)
+      ? QString("Erro semântico na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro semântico"));
   } catch (...) {
     console->appendLog(QStringLiteral("Erro desconhecido durante a compilação."), QColor("#f87171"));
     statusBar()->showMessage(QStringLiteral("Erro desconhecido"));

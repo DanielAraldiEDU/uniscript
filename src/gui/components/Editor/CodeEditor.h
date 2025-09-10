@@ -12,6 +12,8 @@ public:
   int lineNumberAreaWidth() const;
   void lineNumberAreaPaintEvent(QPaintEvent* event);
   void setMinGutterDigits(int digits) { minGutterDigits = qMax(1, digits); updateLineNumberAreaWidth(0); }
+  void clearErrorMarkers();
+  void showErrorAt(int position, int length = 1);
 
 protected:
   void resizeEvent(QResizeEvent* event) override;
