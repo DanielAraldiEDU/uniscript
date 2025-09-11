@@ -108,7 +108,7 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<if>
+<attr>
 <primitivetype>
 <complextype>
 <type>
@@ -117,8 +117,13 @@ KEY_RBRACE: "}"
 <function>
 <while>
 <dowhile>
+<fortype>
+<forvalue>
+<for>
+<state>
 <else>
 <elif>
+<if>
 <commands>
 <command>
 <exp>
@@ -131,6 +136,7 @@ KEY_RBRACE: "}"
 <exp7>
 <exp8>
 <exp9>
+<exp10>
 <value>
 <op_rel>
 <op_neg>
@@ -143,7 +149,7 @@ KEY_RBRACE: "}"
 // O mesmo está acontecendo para os loops.
 // O mesmo está acontecendo para as funções.
 
-<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_OBJECT | KEY_TYPE_VOID;
+<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
 <complextype> ::= <primitivetype> KEY_LBRACKET KEY_RBRACKET;
 <type> ::= <primitivetype> | <complextype>;
 <param> ::= KEY_VARIABLE KEY_COLON <type>
@@ -159,6 +165,14 @@ KEY_RBRACE: "}"
   | KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE;
 <dowhile> ::= KEY_DO <commands> <while>
   | KEY_DO KEY_LBRACE <commands> KEY_RBRACE <while>;
+<fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
+<forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
+<for> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN <commands> 
+  | KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE; 
+
+<state> ::= KEY_CONST | KEY_VAR;
+<attr> ::= <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <exp> KEY_SEMICOLON
+  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <function>;
 
 <else> ::= KEY_ELSE <commands>
   | KEY_ELSE KEY_LBRACE KEY_RBRACE
@@ -183,7 +197,6 @@ KEY_RBRACE: "}"
 <command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
   | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON; // Terá que adicionar mais comandos aqui (acredito eu)
   
-// Exemplo para testar tudo: -x + 8.8 - !x * 2 / ~y % 3 << 7 != y >> 3 || (x <= 3 && y > 8) | p & (h ^ g)
 <exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
 <exp1> ::= <exp1> KEY_AND <exp2> | <exp2>;
 <exp2> ::= <exp2> KEY_BIT_OR <exp3> | <exp3>;
@@ -193,7 +206,8 @@ KEY_RBRACE: "}"
 <exp6> ::= <exp6> <op_bitwise> <exp7> | <exp7>;
 <exp7> ::= <exp7> <op_arit_baixa> <exp8> | <exp8>;
 <exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
-<exp9> ::= <op_neg> <value> | <value>;
+<exp9> ::= <op_neg> <value> | <value> | <exp10>;
+<exp10> ::= KEY_VARIABLE KEY_INCREMENT | KEY_VARIABLE KEY_DECREMENT;
 
 <value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_LPAREN <exp> KEY_RPAREN;
 
