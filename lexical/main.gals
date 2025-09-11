@@ -81,8 +81,8 @@ KEY_NOT: "!"
 // OPERADORES RELACIONAIS
 KEY_GREATER: ">"
 KEY_LESSER: "<"
-KEY_GREATER_EGUAL: ">="
-KEY_LESSER_EGUAL: "<="
+KEY_GREATER_EQUAL: ">="
+KEY_LESSER_EQUAL: "<="
 KEY_EQUAL: "=="
 KEY_NOT_EQUAL: "!="
 
@@ -124,6 +124,8 @@ KEY_RBRACE: "}"
 <else>
 <elif>
 <if>
+<arrayvalues>
+<array>
 <commands>
 <command>
 <exp>
@@ -171,8 +173,10 @@ KEY_RBRACE: "}"
   | KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE; 
 
 <state> ::= KEY_CONST | KEY_VAR;
+// TODO: Adicionar atribuição de valor via index do array.
 <attr> ::= <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <exp> KEY_SEMICOLON
-  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <function>;
+  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <function>
+  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <array>;
 
 <else> ::= KEY_ELSE <commands>
   | KEY_ELSE KEY_LBRACE KEY_RBRACE
@@ -193,6 +197,10 @@ KEY_RBRACE: "}"
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <elif>
   | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <elif>;
 
+<arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
+<array> ::= KEY_LBRACKET KEY_RBRACKET KEY_SEMICOLON
+  | KEY_LBRACKET <arrayvalues> KEY_RBRACKET KEY_SEMICOLON;
+
 <commands> ::= <command> <commands> | <command>;
 <command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
   | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON; // Terá que adicionar mais comandos aqui (acredito eu)
@@ -211,7 +219,7 @@ KEY_RBRACE: "}"
 
 <value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_LPAREN <exp> KEY_RPAREN;
 
-<op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EGUAL | KEY_LESSER_EGUAL | KEY_ATTR | KEY_NOT_EQUAL; 
+<op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
 <op_neg> ::= KEY_SUB | KEY_BIT_NOT | KEY_NOT;
 <op_bitwise> ::= KEY_BIT_SL | KEY_BIT_SR;
 <op_arit_baixa> ::= KEY_SUM | KEY_SUB;
