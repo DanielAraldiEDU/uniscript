@@ -57,6 +57,7 @@ KEY_THROW = KEY_VARIABLE:"throw"
 KEY_CONTINUE = KEY_VARIABLE:"continue"
 KEY_TRUE = KEY_VARIABLE:"true"
 KEY_FALSE = KEY_VARIABLE:"false"
+KEY_NULL = KEY_VARIABLE:"null"
 
 // COMENTÁRIOS
 KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
@@ -108,7 +109,7 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<attr>
+<value>
 <rowswritten>
 <emptybracket>
 <emptybrace>
@@ -137,6 +138,7 @@ KEY_RBRACE: "}"
 <dowhile>
 <for>
 <attrfunction>
+<attr>
 <else>
 <elif>
 <if>
@@ -154,7 +156,6 @@ KEY_RBRACE: "}"
 <exp8>
 <exp9>
 <exp10>
-<value>
 <op_rel>
 <op_neg>
 <op_bitwise>
@@ -257,7 +258,7 @@ KEY_RBRACE: "}"
 <exp10> ::= <increment> | <decrement>;
 
 // Values
-<value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_LPAREN <exp> KEY_RPAREN;
+<value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_NULL | KEY_LPAREN <exp> KEY_RPAREN;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
