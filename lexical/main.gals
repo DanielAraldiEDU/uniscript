@@ -109,7 +109,7 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<value>
+<attr>
 <rowswritten>
 <emptybracket>
 <emptybrace>
@@ -122,6 +122,7 @@ KEY_RBRACE: "}"
 <forvalue>
 <forscope>
 <attrstate>
+<multiattrscope>
 <attrscope>
 <arrayvalues>
 <arrayscope>
@@ -138,7 +139,7 @@ KEY_RBRACE: "}"
 <dowhile>
 <for>
 <attrfunction>
-<attr>
+<attrvalue>
 <else>
 <elif>
 <if>
@@ -156,6 +157,7 @@ KEY_RBRACE: "}"
 <exp8>
 <exp9>
 <exp10>
+<value>
 <op_rel>
 <op_neg>
 <op_bitwise>
@@ -181,7 +183,8 @@ KEY_RBRACE: "}"
 <forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
 <forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
 <attrstate> ::= KEY_CONST | KEY_VAR;
-<attrscope> ::= <attrstate> <typeofvalue>;
+<multiattrscope> ::= KEY_VARIABLE KEY_COMMA <multiattrscope> | KEY_VARIABLE KEY_COMMA <typeofvalue>;
+<attrscope> ::= <attrstate> <multiattrscope> | <attrstate> <typeofvalue>;
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
@@ -208,14 +211,15 @@ KEY_RBRACE: "}"
 // Attribuition
 <attrfunction> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_SEMICOLON
   | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_SEMICOLON;
-<attr> ::= <attrscope> KEY_ATTR <exp> KEY_SEMICOLON
+<attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
+<attr> ::= <attrscope> KEY_ATTR <attrvalue>
   | <attrscope> KEY_ATTR <attrfunction>
   | <attrscope> KEY_ATTR <function>
   | <attrscope> KEY_ATTR <array>
   | <attrscope> KEY_ATTR <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON
+  | <attrscope> KEY_SEMICOLON
   | <increment> KEY_SEMICOLON 
-  | <decrement> KEY_SEMICOLON
-  | <attrscope> KEY_SEMICOLON;
+  | <decrement> KEY_SEMICOLON;
 
 // Conditionals
 <else> ::= KEY_ELSE <commands> | KEY_ELSE <emptybrace> | KEY_ELSE <rowswritten>;
