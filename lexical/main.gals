@@ -109,22 +109,37 @@ KEY_RBRACE: "}"
 
 #NonTerminals
 <attr>
+<rowswritten>
+<emptybracket>
+<emptybrace>
+<typeofvalue>
+<deffunction>
+<increment>
+<decrement>
+<whilescope>
+<fortype>
+<forvalue>
+<forscope>
+<attrstate>
+<attrscope>
+<arrayvalues>
+<arrayscope>
+<elifscope>
+<ifscope>
 <primitivetype>
 <complextype>
 <type>
 <param>
 <params>
+<attrsparams>
 <function>
 <while>
 <dowhile>
-<fortype>
-<forvalue>
 <for>
-<state>
+<attrfunction>
 <else>
 <elif>
 <if>
-<arrayvalues>
 <array>
 <commands>
 <command>
@@ -151,60 +166,84 @@ KEY_RBRACE: "}"
 // O mesmo está acontecendo para os loops.
 // O mesmo está acontecendo para as funções.
 
-<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
-<complextype> ::= <primitivetype> KEY_LBRACKET KEY_RBRACKET;
-<type> ::= <primitivetype> | <complextype>;
-<param> ::= KEY_VARIABLE KEY_COLON <type>
-  | KEY_VARIABLE KEY_COLON <type> KEY_COMMA <param>;
-<params> ::= <param> <params> | <param>;
-<function> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON <type> KEY_LBRACE KEY_RBRACE
-  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON <type> KEY_LBRACE <commands> KEY_RBRACE
-  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON <type> KEY_LBRACE <commands> KEY_RBRACE
-  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON <type> KEY_LBRACE KEY_RBRACE;
-
-// TODO: Tem que fazer o for
-<while> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN <commands>
-  | KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE;
-<dowhile> ::= KEY_DO <commands> <while>
-  | KEY_DO KEY_LBRACE <commands> KEY_RBRACE <while>;
+// Sintaxes
+<rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
+<emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
+<emptybrace> ::= KEY_LBRACE KEY_RBRACE;
+<typeofvalue> ::= KEY_VARIABLE KEY_COLON <type>;
+<deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
+  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
+<increment> ::= KEY_VARIABLE KEY_INCREMENT;
+<decrement> ::= KEY_VARIABLE KEY_DECREMENT;
+<whilescope> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
-<for> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN <commands> 
-  | KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE; 
-
-<state> ::= KEY_CONST | KEY_VAR;
-// TODO: Adicionar atribuição de valor via index do array.
-<attr> ::= <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <exp> KEY_SEMICOLON
-  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <function>
-  | <state> KEY_VARIABLE KEY_COLON <type> KEY_ATTR <array>;
-
-<else> ::= KEY_ELSE <commands>
-  | KEY_ELSE KEY_LBRACE KEY_RBRACE
-  | KEY_ELSE KEY_LBRACE <commands> KEY_RBRACE;
-<elif> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands>
-  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
-  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE
-  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
-  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <else>
-  | KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>;
-<if> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <else>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN <commands> <elif>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <else>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <else>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE KEY_RBRACE <elif>
-  | KEY_IF KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <commands> KEY_RBRACE <elif>;
-
+<forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
+<attrstate> ::= KEY_CONST | KEY_VAR;
+<attrscope> ::= <attrstate> <typeofvalue>;
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
-<array> ::= KEY_LBRACKET KEY_RBRACKET KEY_SEMICOLON
-  | KEY_LBRACKET <arrayvalues> KEY_RBRACKET KEY_SEMICOLON;
+<arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
+<elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
+<ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
 
+// Types
+<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
+<complextype> ::= <primitivetype> <emptybracket>;
+<type> ::= <primitivetype> | <complextype>;
+
+// Paramenters
+<param> ::= <typeofvalue> | <typeofvalue> KEY_COMMA <param>;
+<params> ::= <param> <params> | <param>;
+<attrsparams> ::= <exp> KEY_COMMA <attrsparams> | <exp>;
+
+// Function
+<function> ::= <deffunction> <type> <emptybrace> | <deffunction> <type> <rowswritten>;
+
+// Loops
+<while> ::= <whilescope> <commands> | <whilescope> <rowswritten>;
+<dowhile> ::= KEY_DO <commands> <while> | KEY_DO <rowswritten> <while>;
+<for> ::= <forscope> <commands> | <forscope> <rowswritten>; 
+
+// Attribuition
+<attrfunction> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_SEMICOLON
+  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_SEMICOLON;
+<attr> ::= <attrscope> KEY_ATTR <exp> KEY_SEMICOLON
+  | <attrscope> KEY_ATTR <attrfunction>
+  | <attrscope> KEY_ATTR <function>
+  | <attrscope> KEY_ATTR <array>
+  | <attrscope> KEY_ATTR <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON
+  | <increment> KEY_SEMICOLON 
+  | <decrement> KEY_SEMICOLON
+  | <attrscope> KEY_SEMICOLON;
+
+// Conditionals
+<else> ::= KEY_ELSE <commands> | KEY_ELSE <emptybrace> | KEY_ELSE <rowswritten>;
+<elif> ::= <elifscope> <commands>
+  | <elifscope> <commands> <else>
+  | <elifscope> <emptybrace>
+  | <elifscope> <rowswritten>
+  | <elifscope> <emptybrace> <else>
+  | <elifscope> <rowswritten> <else>;
+<if> ::= <ifscope> <commands>
+  | <ifscope> <commands> <else>
+  | <ifscope> <commands> <elif>
+  | <ifscope> <emptybrace>
+  | <ifscope> <rowswritten>
+  | <ifscope> <emptybrace> <else>
+  | <ifscope> <rowswritten> <else>
+  | <ifscope> <emptybrace> <elif>
+  | <ifscope> <rowswritten> <elif>;
+
+// Array
+<array> ::= <arrayscope> KEY_SEMICOLON;
+
+// Commands
+// TODO: Tem que mudar isso aqui para aceitar todos os comandos existentes 
 <commands> ::= <command> <commands> | <command>;
 <command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
-  | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON; // Terá que adicionar mais comandos aqui (acredito eu)
+  | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
   
+// Expressions
 <exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
 <exp1> ::= <exp1> KEY_AND <exp2> | <exp2>;
 <exp2> ::= <exp2> KEY_BIT_OR <exp3> | <exp3>;
@@ -215,10 +254,12 @@ KEY_RBRACE: "}"
 <exp7> ::= <exp7> <op_arit_baixa> <exp8> | <exp8>;
 <exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
 <exp9> ::= <op_neg> <value> | <value> | <exp10>;
-<exp10> ::= KEY_VARIABLE KEY_INCREMENT | KEY_VARIABLE KEY_DECREMENT;
+<exp10> ::= <increment> | <decrement>;
 
+// Values
 <value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_LPAREN <exp> KEY_RPAREN;
 
+// Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
 <op_neg> ::= KEY_SUB | KEY_BIT_NOT | KEY_NOT;
 <op_bitwise> ::= KEY_BIT_SL | KEY_BIT_SR;
