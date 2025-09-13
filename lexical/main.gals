@@ -214,14 +214,15 @@ KEY_RBRACE: "}"
 <attrfunction> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COMMA <attrfunction> 
   | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_COMMA <attrfunction>
   | KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_SEMICOLON
-  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_SEMICOLON;
+  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_SEMICOLON
+  | <function> KEY_COMMA <attrfunction> 
+  | <function> KEY_SEMICOLON;
 <attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
 <attrarraybyindex> ::= <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_COMMA <attrarraybyindex>
   | <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON;
 <attr> ::= <attrscope> KEY_ATTR <attrvalue>
   | <attrscope> KEY_ATTR <attrfunction>
-  | <attrscope> KEY_ATTR <function>
   | <attrscope> KEY_ATTR <attrarray>
   | <attrscope> KEY_ATTR <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
