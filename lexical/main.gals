@@ -109,7 +109,7 @@ KEY_LBRACE: "{"
 KEY_RBRACE: "}"
 
 #NonTerminals
-<attr>
+<program>
 <rowswritten>
 <emptybracket>
 <emptybrace>
@@ -128,6 +128,7 @@ KEY_RBRACE: "}"
 <arrayscope>
 <elifscope>
 <ifscope>
+<ioscope>
 <primitivetype>
 <complextype>
 <type>
@@ -142,10 +143,21 @@ KEY_RBRACE: "}"
 <attrvalue>
 <attrarray>
 <attrarraybyindex>
+<attr>
+<switchcase>
+<cases>
+<case>
+<default>
 <else>
 <elif>
 <if>
 <array>
+<print>
+<read>
+<comments>
+<return>
+<break>
+<continue>
 <commands>
 <command>
 <exp>
@@ -166,11 +178,6 @@ KEY_RBRACE: "}"
 <op_arit_baixa>
 <op_arit_alta>
 #Grammar
-// TODO: 
-// Entender porque quando dois ou mais bloco condicionais (if e depois outro if...) dão erro de fim de sentança.
-// O mesmo está acontecendo para os loops.
-// O mesmo está acontecendo para as funções.
-
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
 <emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
@@ -191,6 +198,7 @@ KEY_RBRACE: "}"
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
 <ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
+<ioscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
 
 // Types
 <primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
@@ -230,6 +238,12 @@ KEY_RBRACE: "}"
   | <decrement> KEY_SEMICOLON;
 
 // Conditionals
+<switchcase> ::= KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE 
+  | KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> <default> KEY_RBRACE;
+<cases> ::= <case> <cases> | <case>;
+<case> ::= KEY_CASE <exp> KEY_COLON <commands>;
+<default> ::= KEY_DEFAULT KEY_COLON <commands>;
+
 <else> ::= KEY_ELSE <commands> | KEY_ELSE <emptybrace> | KEY_ELSE <rowswritten>;
 <elif> ::= <elifscope> <commands>
   | <elifscope> <commands> <else>
@@ -250,11 +264,23 @@ KEY_RBRACE: "}"
 // Array
 <array> ::= <arrayscope> KEY_SEMICOLON;
 
+// I/O
+<print> ::= KEY_PRINT <ioscope>;
+<read> ::= KEY_READ <ioscope>;
+
+// Comments
+<comments> ::= KEY_COMMENT_LINE | KEY_COMMENT_MULT_LINE;
+
+// Finals
+<return> ::= KEY_RETURN <exp> KEY_SEMICOLON | KEY_RETURN KEY_SEMICOLON;
+<break> ::= KEY_BREAK KEY_SEMICOLON;
+<continue> ::= KEY_CONTINUE KEY_SEMICOLON;
+
 // Commands
-// TODO: Tem que mudar isso aqui para aceitar todos os comandos existentes 
+// TODO: Tem que adicionar o for, while, do while, expressões e if
+<program> ::= <commands>;
 <commands> ::= <command> <commands> | <command>;
-<command> ::= KEY_PRINT KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON
-  | KEY_READ KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
+<command> ::= <print> | <read> | <attr> | <function> | <switchcase> | <comments> | <return> | <break> | <continue>;
   
 // Expressions
 <exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
