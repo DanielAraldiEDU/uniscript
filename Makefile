@@ -99,6 +99,25 @@ wasm-docker: docker-build | web/public
 	echo "[wasm-docker] Done: web/public/uniscript.js + web/public/uniscript.wasm"
 
 # -----------------
+# Frontend helpers
+# -----------------
+.PHONY: web-install web-dev web-build web-preview
+
+web-install:
+	cd web && npm install
+
+# Starts Vite dev server. Ensures WASM is present first (local or Docker fallback)
+web-dev: wasm
+	cd web && npm run dev
+
+# Build production bundle. Ensures WASM is present first
+web-build: wasm
+	cd web && npm run build
+
+web-preview:
+	cd web && npm run preview
+
+# -----------------
 # WebAssembly (Emscripten)
 # -----------------
 
