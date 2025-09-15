@@ -79,10 +79,7 @@ $(GUI_TARGET): $(GUI_OBJS) | $(BIN_DIR)
 run-gui: $(GUI_TARGET)
 	$(GUI_TARGET)
 
-# -------------
-# Docker helpers
-# -------------
-.PHONY: docker-build docker-artifacts
+.PHONY: docker-build docker-artifacts wasm-docker
 
 docker-build:
 	docker build -f docker/Dockerfile -t uniscript-build --target artifacts .
@@ -91,3 +88,39 @@ docker-artifacts:
 	CID=$$(docker create uniscript-build); \
 	docker cp $$CID:/out ./artifacts; \
 	docker rm $$CID
+
+# Build WASM via Docker and place artifacts into web/public
+wasm-docker: docker-build | web/public
+	@set -e; \
+	CID=$$(docker create uniscript-build /bin/true); \
+	if [ -z "$$CID" ]; then echo "[wasm-docker] Falha ao criar container"; exit 1; fi; \
+	docker cp $$CID:/out/. web/public/; \
+	docker rm $$CID >/dev/null; \
+	echo "[wasm-docker] Done: web/public/uniscript.js + web/public/uniscript.wasm"
+
+# -----------------
+# WebAssembly (Emscripten)
+# -----------------
+
+.PHONY: wasm
+
+# Build the compiler core to WebAssembly for use in the React SPA.
+wasm: | web/public
+	@if command -v emcc >/dev/null 2>&1; then \
+	  echo "[wasm] Building WebAssembly module into web/public ..."; \
+	  emcc \
+	    src/gals/*.cpp \
+	    bridge.cpp \
+	    -O3 -s MODULARIZE=1 -s EXPORT_NAME=createUniscriptModule -s ENVIRONMENT=web -fwasm-exceptions \
+	    -s EXPORTED_FUNCTIONS='["_uniscript_compile","_free"]' \
+	    -s EXPORTED_RUNTIME_METHODS='["cwrap","UTF8ToString"]' \
+	    -I src \
+	    -o web/public/uniscript.js; \
+	  echo "[wasm] Done: web/public/uniscript.js + web/public/uniscript.wasm"; \
+	else \
+	  echo "[wasm] 'emcc' não encontrado. Usando fallback via Docker..."; \
+	  $(MAKE) wasm-docker; \
+	fi
+
+web/public:
+	@mkdir -p web/public
