@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Editor } from '@monaco-editor/react'
 import type * as MonacoNS from 'monaco-editor'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Console as ConsoleComponent, type LogItem } from './components/Console'
+import { Editor } from './components/Editor'
+import { HeaderBar } from './components/HeaderBar'
+import { StatusBar } from './components/StatusBar'
+import { theme } from './theme'
 import { compileSource, posToLineCol } from './wasm/uniscript'
-
-type LogItem = { time: string; text: string; color: string }
 
 export default function App() {
   const [code, setCode] = useState<string>('while (x < 10){read(x);}\n')
@@ -12,25 +14,15 @@ export default function App() {
   const monacoRef = useRef<typeof MonacoNS | null>(null)
   const modelRef = useRef<MonacoNS.editor.ITextModel | null>(null)
 
-  const theme = useMemo(() => ({
-    bg: '#09090b',
-    panel: '#18181b',
-    text: '#e4e4e7',
-    subtle: '#a1a1aa',
-    button: '#27272a',
-    border: '#3f3f46',
-    blue: '#60a5fa',
-    green: '#34d399',
-    red: '#f87171',
-  }), [])
+  useMemo(() => theme, [])
 
-  function addLog(text: string, color = theme.subtle) {
-    const now = new Date()
-    const hh = String(now.getHours()).padStart(2, '0')
-    const mm = String(now.getMinutes()).padStart(2, '0')
-    const ss = String(now.getSeconds()).padStart(2, '0')
-    setLogs((l) => [...l, { time: `[${hh}:${mm}:${ss}]`, text, color }])
-  }
+  function addLog(text: string, color: string = theme.subtle) {
+      const now = new Date()
+      const hh = String(now.getHours()).padStart(2, '0')
+      const mm = String(now.getMinutes()).padStart(2, '0')
+      const ss = String(now.getSeconds()).padStart(2, '0')
+      setLogs((l) => [...l, { time: `[${hh}:${mm}:${ss}]`, text, color }])
+    }
 
   function clearMarkers() {
     const monaco = monacoRef.current
@@ -83,44 +75,24 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: theme.bg, color: theme.text }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, background: theme.panel, padding: 10, borderBottom: `1px solid ${theme.border}` }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>UniScript</div>
-        <div style={{ flex: 1 }} />
-        <button onClick={handleCompile} style={{ color: theme.text, background: theme.button, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 14px' }}>Compilar</button>
-      </header>
+      <HeaderBar onCompile={handleCompile} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 3, minHeight: 0 }}>
           <Editor
-            height="100%"
-            defaultLanguage="plaintext"
             value={code}
-            onMount={(editor, monaco) => {
-              monacoRef.current = monaco as unknown as typeof MonacoNS
-              modelRef.current = editor.getModel()
-              editor.updateOptions({ fontSize: 14, minimap: { enabled: false }, wordWrap: 'off' })
-              monaco.editor.defineTheme('uniscript-dark', {
-                base: 'vs-dark', inherit: true, rules: [], colors: {
-                  'editor.background': theme.bg,
-                }
-              })
-              monaco.editor.setTheme('uniscript-dark')
-              editor.onDidChangeCursorPosition((e) => {
-                setCursor({ line: e.position.lineNumber, col: e.position.column })
-              })
-            }}
-            onChange={(val) => setCode(val ?? '')}
-            options={{ padding: { top: 8, bottom: 8 } }}
+            onChange={(v) => setCode(v)}
+            onCursor={(line, col) => setCursor({ line, col })}
+            monacoRef={monacoRef}
+            modelRef={modelRef}
           />
         </div>
         <div style={{ flex: 1, minHeight: 0, borderTop: `1px solid ${theme.border}` }}>
-          <Console logs={logs} />
+          <ConsoleComponent logs={logs} />
         </div>
       </div>
 
-      <footer style={{ background: theme.panel, borderTop: `1px solid ${theme.border}`, color: '#a1a1aa', padding: '6px 10px', fontSize: 12 }}>
-        Linha {cursor.line}, Coluna {cursor.col}
-      </footer>
+      <StatusBar line={cursor.line} col={cursor.col} />
     </div>
   )
 }
