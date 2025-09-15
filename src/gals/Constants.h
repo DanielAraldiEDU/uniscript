@@ -1,0 +1,112 @@
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
+
+enum TokenId 
+{
+    EPSILON  = 0,
+    DOLLAR   = 1,
+    t_KEY_PRINT = 2,
+    t_KEY_READ = 3,
+    t_KEY_VARIABLE = 4,
+    t_KEY_DECIMAL = 5,
+    t_KEY_INTEGER = 6,
+    t_KEY_BINARY = 7,
+    t_KEY_HEXADECIMAL = 8,
+    t_KEY_STRING = 9,
+    t_KEY_TYPE_INT = 10,
+    t_KEY_TYPE_FLOAT = 11,
+    t_KEY_TYPE_STRING = 12,
+    t_KEY_TYPE_BOOLEAN = 13,
+    t_KEY_TYPE_FUNC = 14,
+    t_KEY_TYPE_OBJECT = 15,
+    t_KEY_TYPE_VOID = 16,
+    t_KEY_IF = 17,
+    t_KEY_ELSE = 18,
+    t_KEY_ELIF = 19,
+    t_KEY_DO = 20,
+    t_KEY_WHILE = 21,
+    t_KEY_FOR = 22,
+    t_KEY_RETURN = 23,
+    t_KEY_FUNCTION = 24,
+    t_KEY_CONST = 25,
+    t_KEY_VAR = 26,
+    t_KEY_SWITCH = 27,
+    t_KEY_CASE = 28,
+    t_KEY_BREAK = 29,
+    t_KEY_DEFAULT = 30,
+    t_KEY_TRY = 31,
+    t_KEY_CATCH = 32,
+    t_KEY_FINALLY = 33,
+    t_KEY_THROW = 34,
+    t_KEY_CONTINUE = 35,
+    t_KEY_TRUE = 36,
+    t_KEY_FALSE = 37,
+    t_KEY_COMMENT_MULT_LINE = 38,
+    t_KEY_COMMENT_LINE = 39,
+    t_KEY_SUM = 40,
+    t_KEY_SUB = 41,
+    t_KEY_MULT = 42,
+    t_KEY_DIV = 43,
+    t_KEY_MOD = 44,
+    t_KEY_EXPO = 45,
+    t_KEY_INCREMENT = 46,
+    t_KEY_DECREMENT = 47,
+    t_KEY_ATTR = 48,
+    t_KEY_OR = 49,
+    t_KEY_AND = 50,
+    t_KEY_NOT = 51,
+    t_KEY_GREATER = 52,
+    t_KEY_LESSER = 53,
+    t_KEY_GREATER_EGUAL = 54,
+    t_KEY_LESSER_EGUAL = 55,
+    t_KEY_EQUAL = 56,
+    t_KEY_NOT_EQUAL = 57,
+    t_KEY_BIT_SR = 58,
+    t_KEY_BIT_SL = 59,
+    t_KEY_BIT_AND = 60,
+    t_KEY_BIT_OR = 61,
+    t_KEY_NEGACAO = 62,
+    t_KEY_BIT_XOR = 63,
+    t_KEY_BIT_NOT = 64,
+    t_KEY_DOT = 65,
+    t_KEY_COMMA = 66,
+    t_KEY_SEMICOLON = 67,
+    t_KEY_COLON = 68,
+    t_KEY_LPAREN = 69,
+    t_KEY_RPAREN = 70,
+    t_KEY_LBRACKET = 71,
+    t_KEY_RBRACKET = 72,
+    t_KEY_LBRACE = 73,
+    t_KEY_RBRACE = 74
+};
+
+const int STATES_COUNT = 64;
+
+extern int SCANNER_TABLE[STATES_COUNT][256];
+
+extern int TOKEN_STATE[STATES_COUNT];
+
+extern int SPECIAL_CASES_INDEXES[76];
+
+extern const char *SPECIAL_CASES_KEYS[28];
+
+extern int SPECIAL_CASES_VALUES[28];
+
+extern const char *SCANNER_ERROR[STATES_COUNT];
+
+const int FIRST_SEMANTIC_ACTION = 104;
+
+const int SHIFT  = 0;
+const int REDUCE = 1;
+const int ACTION = 2;
+const int ACCEPT = 3;
+const int GO_TO  = 4;
+const int ERROR  = 5;
+
+extern const int PARSER_TABLE[80][104][2];
+
+extern const int PRODUCTIONS[90][2];
+
+extern const char *PARSER_ERROR[80];
+
+#endif

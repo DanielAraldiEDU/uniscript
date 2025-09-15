@@ -1,0 +1,19 @@
+{
+  "name": "uniscript-root",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "web:install": "npm --prefix web install",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:preview": "npm --prefix web run preview",
+    "wasm": "node scripts/build-wasm.js",
+    "ensure-wasm": "node scripts/ensure-wasm.js",
+    "dev": "npm run ensure-wasm && npm run web:dev",
+    "build": "npm run ensure-wasm && npm run web:build",
+    "preview": "npm run web:preview",
+    "setup": "npm run wasm && npm run web:install"
+  }
+}
+
