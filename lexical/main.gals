@@ -148,6 +148,8 @@ KEY_RBRACE: "}"
 <cases>
 <case>
 <default>
+<statement>
+<single_command>
 <else>
 <elif>
 <if>
@@ -214,9 +216,9 @@ KEY_RBRACE: "}"
 <function> ::= <deffunction> <type> <emptybrace> | <deffunction> <type> <rowswritten>;
 
 // Loops
-<while> ::= <whilescope> <commands> | <whilescope> <rowswritten>;
-<dowhile> ::= KEY_DO <commands> <while> | KEY_DO <rowswritten> <while>;
-<for> ::= <forscope> <commands> | <forscope> <rowswritten>; 
+<while> ::= <whilescope> <statement>;
+<dowhile> ::= KEY_DO <statement> <whilescope> KEY_SEMICOLON;
+<for> ::= <forscope> <statement>; 
 
 // Attribuition
 <attrfunction> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COMMA <attrfunction> 
@@ -244,22 +246,12 @@ KEY_RBRACE: "}"
 <case> ::= KEY_CASE <exp> KEY_COLON <commands>;
 <default> ::= KEY_DEFAULT KEY_COLON <commands>;
 
-<else> ::= KEY_ELSE <commands> | KEY_ELSE <emptybrace> | KEY_ELSE <rowswritten>;
-<elif> ::= <elifscope> <commands>
-  | <elifscope> <commands> <else>
-  | <elifscope> <emptybrace>
-  | <elifscope> <rowswritten>
-  | <elifscope> <emptybrace> <else>
-  | <elifscope> <rowswritten> <else>;
-<if> ::= <ifscope> <commands>
-  | <ifscope> <commands> <else>
-  | <ifscope> <commands> <elif>
-  | <ifscope> <emptybrace>
-  | <ifscope> <rowswritten>
-  | <ifscope> <emptybrace> <else>
-  | <ifscope> <rowswritten> <else>
-  | <ifscope> <emptybrace> <elif>
-  | <ifscope> <rowswritten> <elif>;
+<statement> ::= <rowswritten> | <single_command>;
+<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <array>;
+
+<else> ::= KEY_ELSE <statement>;
+<elif> ::= <elifscope> <statement> | <elifscope> <statement> <else>;
+<if> ::= <ifscope> <statement> | <ifscope> <statement> <else> | <ifscope> <statement> <elif>;
 
 // Array
 <array> ::= <arrayscope> KEY_SEMICOLON;
@@ -277,10 +269,9 @@ KEY_RBRACE: "}"
 <continue> ::= KEY_CONTINUE KEY_SEMICOLON;
 
 // Commands
-// TODO: Tem que adicionar o for, while, do while, expressões e if
 <program> ::= <commands>;
 <commands> ::= <command> <commands> | <command>;
-<command> ::= <print> | <read> | <attr> | <function> | <switchcase> | <comments> | <return> | <break> | <continue>;
+<command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile>;
   
 // Expressions
 <exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
