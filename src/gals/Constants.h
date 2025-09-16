@@ -41,43 +41,44 @@ enum TokenId
     t_KEY_CONTINUE = 35,
     t_KEY_TRUE = 36,
     t_KEY_FALSE = 37,
-    t_KEY_COMMENT_MULT_LINE = 38,
-    t_KEY_COMMENT_LINE = 39,
-    t_KEY_SUM = 40,
-    t_KEY_SUB = 41,
-    t_KEY_MULT = 42,
-    t_KEY_DIV = 43,
-    t_KEY_MOD = 44,
-    t_KEY_EXPO = 45,
-    t_KEY_INCREMENT = 46,
-    t_KEY_DECREMENT = 47,
-    t_KEY_ATTR = 48,
-    t_KEY_OR = 49,
-    t_KEY_AND = 50,
-    t_KEY_NOT = 51,
-    t_KEY_GREATER = 52,
-    t_KEY_LESSER = 53,
-    t_KEY_GREATER_EGUAL = 54,
-    t_KEY_LESSER_EGUAL = 55,
-    t_KEY_EQUAL = 56,
-    t_KEY_NOT_EQUAL = 57,
-    t_KEY_BIT_SR = 58,
-    t_KEY_BIT_SL = 59,
-    t_KEY_BIT_AND = 60,
-    t_KEY_BIT_OR = 61,
-    t_KEY_NEGACAO = 62,
-    t_KEY_BIT_XOR = 63,
-    t_KEY_BIT_NOT = 64,
-    t_KEY_DOT = 65,
-    t_KEY_COMMA = 66,
-    t_KEY_SEMICOLON = 67,
-    t_KEY_COLON = 68,
-    t_KEY_LPAREN = 69,
-    t_KEY_RPAREN = 70,
-    t_KEY_LBRACKET = 71,
-    t_KEY_RBRACKET = 72,
-    t_KEY_LBRACE = 73,
-    t_KEY_RBRACE = 74
+    t_KEY_NULL = 38,
+    t_KEY_COMMENT_MULT_LINE = 39,
+    t_KEY_COMMENT_LINE = 40,
+    t_KEY_SUM = 41,
+    t_KEY_SUB = 42,
+    t_KEY_MULT = 43,
+    t_KEY_DIV = 44,
+    t_KEY_MOD = 45,
+    t_KEY_EXPO = 46,
+    t_KEY_INCREMENT = 47,
+    t_KEY_DECREMENT = 48,
+    t_KEY_ATTR = 49,
+    t_KEY_OR = 50,
+    t_KEY_AND = 51,
+    t_KEY_NOT = 52,
+    t_KEY_GREATER = 53,
+    t_KEY_LESSER = 54,
+    t_KEY_GREATER_EQUAL = 55,
+    t_KEY_LESSER_EQUAL = 56,
+    t_KEY_EQUAL = 57,
+    t_KEY_NOT_EQUAL = 58,
+    t_KEY_BIT_SR = 59,
+    t_KEY_BIT_SL = 60,
+    t_KEY_BIT_AND = 61,
+    t_KEY_BIT_OR = 62,
+    t_KEY_NEGACAO = 63,
+    t_KEY_BIT_XOR = 64,
+    t_KEY_BIT_NOT = 65,
+    t_KEY_DOT = 66,
+    t_KEY_COMMA = 67,
+    t_KEY_SEMICOLON = 68,
+    t_KEY_COLON = 69,
+    t_KEY_LPAREN = 70,
+    t_KEY_RPAREN = 71,
+    t_KEY_LBRACKET = 72,
+    t_KEY_RBRACKET = 73,
+    t_KEY_LBRACE = 74,
+    t_KEY_RBRACE = 75
 };
 
 const int STATES_COUNT = 64;
@@ -86,15 +87,15 @@ extern int SCANNER_TABLE[STATES_COUNT][256];
 
 extern int TOKEN_STATE[STATES_COUNT];
 
-extern int SPECIAL_CASES_INDEXES[76];
+extern int SPECIAL_CASES_INDEXES[77];
 
-extern const char *SPECIAL_CASES_KEYS[28];
+extern const char *SPECIAL_CASES_KEYS[29];
 
-extern int SPECIAL_CASES_VALUES[28];
+extern int SPECIAL_CASES_VALUES[29];
 
 extern const char *SCANNER_ERROR[STATES_COUNT];
 
-const int FIRST_SEMANTIC_ACTION = 104;
+const int FIRST_SEMANTIC_ACTION = 146;
 
 const int SHIFT  = 0;
 const int REDUCE = 1;
@@ -103,10 +104,10 @@ const int ACCEPT = 3;
 const int GO_TO  = 4;
 const int ERROR  = 5;
 
-extern const int PARSER_TABLE[80][104][2];
+extern const int PARSER_TABLE[260][146][2];
 
-extern const int PRODUCTIONS[90][2];
+extern const int PRODUCTIONS[157][2];
 
-extern const char *PARSER_ERROR[80];
+extern const char *PARSER_ERROR[260];
 
 #endif
