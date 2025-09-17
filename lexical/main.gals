@@ -321,6 +321,6 @@ KEY_RBRACE: "}"
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
 <op_neg> ::= KEY_SUB | KEY_BIT_NOT | KEY_NOT;
-<op_bitwise> ::= KEY_BIT_SL | KEY_BIT_SR | KEY_BIT_XOR | KEY_BIT_NOT;;
+<op_bitwise> ::= KEY_BIT_SL | KEY_BIT_SR | KEY_BIT_XOR | KEY_BIT_NOT;
 <op_arit_baixa> ::= KEY_SUM | KEY_SUB;
 <op_arit_alta> ::= KEY_MULT | KEY_DIV | KEY_MOD;
