@@ -114,6 +114,7 @@ KEY_RBRACE: "}"
 <emptybracket>
 <emptybrace>
 <typeofvalue>
+<typeoflvalue>
 <deffunction>
 <increment>
 <decrement>
@@ -173,20 +174,24 @@ KEY_RBRACE: "}"
 <exp6>
 <exp7>
 <exp8>
-<exp9>
+<exp9>`
 <exp10>
 <value>
+<indexedvalue>
 <op_rel>
 <op_neg>
 <op_bitwise>
 <op_arit_baixa>
 <op_arit_alta>
+
 #Grammar
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
 <emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
 <emptybrace> ::= KEY_LBRACE KEY_RBRACE;
 <typeofvalue> ::= KEY_VARIABLE KEY_COLON <type>;
+<typeoflvalue> ::= <indexedvalue> KEY_COLON <type>;
+
 <deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
   | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
 <increment> ::= KEY_VARIABLE KEY_INCREMENT;
@@ -200,10 +205,11 @@ KEY_RBRACE: "}"
 <attrarrayscope> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_COLON <type>;
 <attrscope> ::= <typeofvalue> 
   | <multiattrscope> 
-  | <attrarrayscope> 
   | <attrstate> <typeofvalue> 
   | <attrstate> <multiattrscope>
-  | <attrstate> <attrarrayscope>;
+  | <typeoflvalue>                   
+  | <attrstate> <typeoflvalue>;      
+
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
@@ -234,6 +240,7 @@ KEY_RBRACE: "}"
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
 <attrarraybyindex> ::= <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_COMMA <attrarraybyindex>
   | <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON;
+
 <attr> ::= <attrscope> KEY_ATTR <attrvalue>
   | <attrscope> KEY_ATTR <attrarray>
   | <attrscope> KEY_ATTR <attrarraybyindex>
@@ -305,7 +312,11 @@ KEY_RBRACE: "}"
   | KEY_NULL 
   | KEY_LPAREN <exp> KEY_RPAREN
   | <exp10>
-  | <funccall>;
+  | <funccall>
+  | <indexedvalue>;
+
+<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET
+  | <indexedvalue> KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
