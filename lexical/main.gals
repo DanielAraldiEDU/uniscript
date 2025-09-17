@@ -123,6 +123,7 @@ KEY_RBRACE: "}"
 <forscope>
 <attrstate>
 <multiattrscope>
+<attrarrayscope>
 <attrscope>
 <arrayvalues>
 <arrayscope>
@@ -195,7 +196,13 @@ KEY_RBRACE: "}"
 <forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
 <attrstate> ::= KEY_CONST | KEY_VAR;
 <multiattrscope> ::= KEY_VARIABLE KEY_COMMA <multiattrscope> | KEY_VARIABLE KEY_COMMA <typeofvalue>;
-<attrscope> ::= <attrstate> <multiattrscope> | <attrstate> <typeofvalue>;
+<attrarrayscope> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_COLON <type>;
+<attrscope> ::= <typeofvalue> 
+  | <multiattrscope> 
+  | <attrarrayscope> 
+  | <attrstate> <typeofvalue> 
+  | <attrstate> <multiattrscope>
+  | <attrstate> <attrarrayscope>;
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
@@ -287,7 +294,17 @@ KEY_RBRACE: "}"
 <exp10> ::= <increment> | <decrement>;
 
 // Values
-<value> ::= KEY_VARIABLE | KEY_DECIMAL | KEY_INTEGER | KEY_BINARY | KEY_HEXADECIMAL | KEY_STRING | KEY_TRUE | KEY_FALSE | KEY_NULL | KEY_LPAREN <exp> KEY_RPAREN;
+<value> ::= KEY_VARIABLE 
+  | KEY_DECIMAL 
+  | KEY_INTEGER 
+  | KEY_BINARY 
+  | KEY_HEXADECIMAL 
+  | KEY_STRING 
+  | KEY_TRUE 
+  | KEY_FALSE 
+  | KEY_NULL 
+  | KEY_LPAREN <exp> KEY_RPAREN 
+  | KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
