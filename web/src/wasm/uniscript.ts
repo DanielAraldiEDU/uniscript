@@ -7,7 +7,13 @@ export async function compileSource(code: string) {
       if (!factory) {
         throw new Error('WASM ausente. Gere web/public/uniscript.js com `make wasm` ou `make wasm-docker`.')
       }
-      return await factory()
+
+      const base = import.meta.env.BASE_URL ?? '/'
+      const baseUrl = new URL(base, window.location.origin).toString()
+
+      return await factory({
+        locateFile: (path: string) => new URL(path, baseUrl).toString()
+      })
     })()
   }
   const Module = await modPromise
