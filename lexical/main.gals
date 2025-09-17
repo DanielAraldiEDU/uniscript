@@ -114,7 +114,6 @@ KEY_RBRACE: "}"
 <emptybracket>
 <emptybrace>
 <typeofvalue>
-<typeoflvalue>
 <deffunction>
 <increment>
 <decrement>
@@ -190,7 +189,6 @@ KEY_RBRACE: "}"
 <emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
 <emptybrace> ::= KEY_LBRACE KEY_RBRACE;
 <typeofvalue> ::= KEY_VARIABLE KEY_COLON <type>;
-<typeoflvalue> ::= <indexedvalue> KEY_COLON <type>;
 
 <deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
   | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
@@ -207,8 +205,8 @@ KEY_RBRACE: "}"
   | <multiattrscope> 
   | <attrstate> <typeofvalue> 
   | <attrstate> <multiattrscope>
-  | <typeoflvalue>                   
-  | <attrstate> <typeoflvalue>;      
+  | <indexedvalue>                  
+  | <attrstate> <indexedvalue>;      
 
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
