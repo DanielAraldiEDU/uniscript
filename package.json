@@ -13,7 +13,7 @@
     "dev": "npm run ensure-wasm && npm run web:dev",
     "build": "npm run ensure-wasm && npm run web:build",
     "preview": "npm run web:preview",
-    "setup": "npm run wasm && npm run web:install"
+    "setup": "npm run wasm && npm run web:install",
+    "clean": "rm -rf bin build ./web/node_modules ./web/dist"
   }
 }
-
