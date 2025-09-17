@@ -140,7 +140,6 @@ KEY_RBRACE: "}"
 <while>
 <dowhile>
 <for>
-<attrfunction>
 <attrvalue>
 <attrarray>
 <attrarraybyindex>
@@ -209,14 +208,15 @@ KEY_RBRACE: "}"
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
 <ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
-<ioscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON | KEY_LPAREN <funccall> KEY_RPAREN KEY_SEMICOLON;
+
+<ioscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
 
 // Types
 <primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
 <complextype> ::= <primitivetype> <emptybracket>;
 <type> ::= <primitivetype> | <complextype>;
 
-// Paramenters
+// Parameters
 <param> ::= <typeofvalue> | <typeofvalue> KEY_COMMA <param>;
 <params> ::= <param> <params> | <param>;
 <attrsparams> ::= <exp> KEY_COMMA <attrsparams> | <exp>;
@@ -229,19 +229,12 @@ KEY_RBRACE: "}"
 <dowhile> ::= KEY_DO <statement> <whilescope> KEY_SEMICOLON;
 <for> ::= <forscope> <statement>; 
 
-// Attribuition
-<attrfunction> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COMMA <attrfunction> 
-  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_COMMA <attrfunction>
-  | KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_SEMICOLON
-  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN KEY_SEMICOLON
-  | <function> KEY_COMMA <attrfunction> 
-  | <function> KEY_SEMICOLON;
+// Attribution
 <attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
 <attrarraybyindex> ::= <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_COMMA <attrarraybyindex>
   | <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON;
 <attr> ::= <attrscope> KEY_ATTR <attrvalue>
-  | <attrscope> KEY_ATTR <attrfunction>
   | <attrscope> KEY_ATTR <attrarray>
   | <attrscope> KEY_ATTR <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
@@ -271,14 +264,16 @@ KEY_RBRACE: "}"
 
 // Finals
 <return> ::= KEY_RETURN <exp> KEY_SEMICOLON
-  | KEY_RETURN KEY_SEMICOLON
-  | KEY_RETURN <functioncall>;
+  | KEY_RETURN KEY_SEMICOLON;
 <break> ::= KEY_BREAK KEY_SEMICOLON;
 <continue> ::= KEY_CONTINUE KEY_SEMICOLON;
 
 // Commands
-<funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN | KEY_VARIABLE KEY_LPAREN <exp> KEY_RPAREN;
+<funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN
+  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN;
+
 <functioncall> ::= <funccall> KEY_SEMICOLON;
+
 <statement> ::= <rowswritten> | <single_command>;
 <single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <array>;
 <program> ::= <commands>;
@@ -309,7 +304,8 @@ KEY_RBRACE: "}"
   | KEY_FALSE 
   | KEY_NULL 
   | KEY_LPAREN <exp> KEY_RPAREN
-  | <exp10>;
+  | <exp10>
+  | <funccall>;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
