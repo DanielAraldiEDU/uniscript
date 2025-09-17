@@ -8,7 +8,7 @@ import { theme } from './theme'
 import { compileSource, posToLineCol } from './wasm/uniscript'
 
 export default function App() {
-  const [code, setCode] = useState<string>('while (x < 10){read(x);}\n')
+  const [code, setCode] = useState<string>('print(\"Hello, World!\");')
   const [logs, setLogs] = useState<LogItem[]>([])
   const [cursor, setCursor] = useState({ line: 1, col: 1 })
   const monacoRef = useRef<typeof MonacoNS | null>(null)
@@ -64,12 +64,12 @@ export default function App() {
     const suffix = (line > 0 && col > 0) ? ` (linha ${line}, coluna ${col}) ` : ''
     switch (kind) {
       case 'lexical':
-        return `: ERROR: Ocorreu um erro léxico${suffix}`
+        return `ERROR: Ocorreu um erro léxico${suffix}`
       case 'semantic':
-        return `: ERROR: Ocorreu um erro semântico${suffix}`
+        return `ERROR: Ocorreu um erro semântico${suffix}`
       case 'syntactic':
       default:
-        return `: ERROR: Ocorreu um erro na sintaxe ${suffix}`
+        return `ERROR: Ocorreu um erro na sintaxe ${suffix}`
     }
   }
 
