@@ -4,10 +4,6 @@ Uma linguagem de programação simples, prática e única. Essa linguagem de pro
 
 ## Como executar
 
-- CLI (console):
-  - Compilar: `make`
-  - Rodar: `make run`
-
 - GUI (IDE):
   - Pré‑requisitos: Qt6 (ou Qt5) e `pkg-config` instalados.
   - Compilar: `make gui`
