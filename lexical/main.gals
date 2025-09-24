@@ -113,7 +113,9 @@ KEY_RBRACE: "}"
 <typeoflvalue>
 <deffunction>
 <increment>
+<arrayincrement>
 <decrement>
+<arraydecrement>
 <whilescope>
 <fortype>
 <forvalue>
@@ -174,6 +176,7 @@ KEY_RBRACE: "}"
 <exp8>
 <exp9>
 <exp10>
+<exp11>
 <value>
 <indexedvalue>
 <op_rel>
@@ -191,8 +194,11 @@ KEY_RBRACE: "}"
 
 <deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
   | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
+  
 <increment> ::= KEY_VARIABLE KEY_INCREMENT;
+<arrayincrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
 <decrement> ::= KEY_VARIABLE KEY_DECREMENT;
+<arraydecrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
 <whilescope> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
@@ -245,7 +251,9 @@ KEY_RBRACE: "}"
   | <attrscope> KEY_ATTR <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
   | <increment> KEY_SEMICOLON 
-  | <decrement> KEY_SEMICOLON;
+  | <arrayincrement> KEY_SEMICOLON 
+  | <decrement> KEY_SEMICOLON
+  | <arraydecrement> KEY_SEMICOLON;
 
 // Conditionals
 <switchcase> ::= KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE 
@@ -299,6 +307,7 @@ KEY_RBRACE: "}"
 <exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
 <exp9> ::= <op_neg> <value> | <value>;
 <exp10> ::= <increment> | <decrement>;
+<exp11> ::= <arrayincrement> | <arraydecrement>;
 
 // Values
 <value> ::= KEY_VARIABLE
@@ -312,6 +321,7 @@ KEY_RBRACE: "}"
   | KEY_NULL 
   | KEY_LPAREN <exp> KEY_RPAREN
   | <exp10>
+  | <exp11>
   | <funccall>
   | <indexedvalue>;
 
