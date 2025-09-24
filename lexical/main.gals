@@ -34,7 +34,6 @@ KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
 KEY_TYPE_STRING = KEY_VARIABLE:"string"
 KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
 KEY_TYPE_FUNC = KEY_VARIABLE:"func"
-KEY_TYPE_OBJECT = KEY_VARIABLE:"object"
 KEY_TYPE_VOID = KEY_VARIABLE:"void"
 KEY_IF = KEY_VARIABLE:"if"
 KEY_ELSE = KEY_VARIABLE:"else"
@@ -50,9 +49,6 @@ KEY_SWITCH = KEY_VARIABLE:"switch"
 KEY_CASE = KEY_VARIABLE:"case"
 KEY_BREAK = KEY_VARIABLE:"break"
 KEY_DEFAULT = KEY_VARIABLE:"default"
-KEY_TRY = KEY_VARIABLE:"try"
-KEY_CATCH = KEY_VARIABLE:"catch"
-KEY_FINALLY = KEY_VARIABLE:"finally"
 KEY_THROW = KEY_VARIABLE:"throw"
 KEY_CONTINUE = KEY_VARIABLE:"continue"
 KEY_TRUE = KEY_VARIABLE:"true"
@@ -160,6 +156,7 @@ KEY_RBRACE: "}"
 <return>
 <break>
 <continue>
+<throw>
 <funccall>
 <functioncall>
 <statement>
@@ -276,6 +273,7 @@ KEY_RBRACE: "}"
   | KEY_RETURN KEY_SEMICOLON;
 <break> ::= KEY_BREAK KEY_SEMICOLON;
 <continue> ::= KEY_CONTINUE KEY_SEMICOLON;
+<throw> ::= KEY_THROW <exp> KEY_SEMICOLON;
 
 // Commands
 <funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN
@@ -284,7 +282,7 @@ KEY_RBRACE: "}"
 <functioncall> ::= <funccall> KEY_SEMICOLON;
 
 <statement> ::= <rowswritten> | <single_command>;
-<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <array>;
+<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <throw> | <array>;
 <program> ::= <commands>;
 <commands> ::= <command> <commands> | <command>;
 <command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
