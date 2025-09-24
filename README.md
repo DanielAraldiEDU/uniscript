@@ -27,3 +27,10 @@ Uso via npm:
 - Desenvolvimento: `npm run dev`
 - Build produção: `npm run build`
 - Preview: `npm run preview`
+
+
+## AJustes do professor
+
+1. problema com read lendo valores não não literais. deveria ler apenas variaveis e vetores.
+2. problema na incrementação em vetores  vetor[i]++
+3. colocar para que quando abra um PR, que suba um github-pages com as alterações.
