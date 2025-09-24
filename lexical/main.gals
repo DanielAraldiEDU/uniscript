@@ -130,7 +130,8 @@ KEY_RBRACE: "}"
 <arrayscope>
 <elifscope>
 <ifscope>
-<ioscope>
+<printscope>
+<readscope>
 <primitivetype>
 <complextype>
 <type>
@@ -183,7 +184,6 @@ KEY_RBRACE: "}"
 <op_bitwise>
 <op_arit_baixa>
 <op_arit_alta>
-
 #Grammar
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
@@ -215,7 +215,9 @@ KEY_RBRACE: "}"
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
 <ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
 
-<ioscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
+<printscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
+<readscope> ::= KEY_LPAREN KEY_VARIABLE KEY_RPAREN KEY_SEMICOLON
+  | KEY_LPAREN <indexedvalue> KEY_RPAREN KEY_SEMICOLON;
 
 // Types
 <primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
@@ -263,8 +265,8 @@ KEY_RBRACE: "}"
 <array> ::= <arrayscope> KEY_SEMICOLON;
 
 // I/O
-<print> ::= KEY_PRINT <ioscope>;
-<read> ::= KEY_READ <ioscope>;
+<print> ::= KEY_PRINT <printscope>;
+<read> ::= KEY_READ <readscope>;
 
 // Comments
 <comments> ::= KEY_COMMENT_LINE | KEY_COMMENT_MULT_LINE;
