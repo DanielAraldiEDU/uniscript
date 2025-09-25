@@ -10,6 +10,7 @@ Uma linguagem de programação simples, prática e única. Essa linguagem de pro
   - Rodar: `make run-gui`
 
 A GUI fica em `src/gui` e oferece:
+
 - Editor de código
 - Botão/ação “Compilar” para rodar a análise sintática.
 - Console de mensagens para erros e depuração.
@@ -19,6 +20,7 @@ A GUI fica em `src/gui` e oferece:
 Interface web client-side em `web/`, compilando o núcleo C++ para WebAssembly.
 
 Uso via npm:
+
 - Gerar WASM e instalar deps: `npm run setup`
 - Desenvolvimento: `npm run dev`
 - Build produção: `npm run build`
