@@ -282,8 +282,8 @@ KEY_RBRACE: "}"
 <throw> ::= KEY_THROW <exp> KEY_SEMICOLON;
 
 // Commands
-<funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN
-  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN;
+<funccall> ::= KEY_VARIABLE #14 KEY_LPAREN KEY_RPAREN
+  | KEY_VARIABLE #14 KEY_LPAREN <attrsparams> KEY_RPAREN;
 
 <functioncall> ::= <funccall> KEY_SEMICOLON;
 
@@ -303,7 +303,7 @@ KEY_RBRACE: "}"
 <exp6> ::= <exp6> <op_bitwise> #8 <exp7> | <exp7>;
 <exp7> ::= <exp7> <op_arit_baixa> #9 <exp8> | <exp8>;
 <exp8> ::= <exp8> <op_arit_alta> #10 <exp9> | <exp9> ;
-<exp9> ::= <op_neg> <value> #1 | <value> #1;
+<exp9> ::= <op_neg> #11 <value> #1 | <value> #1;
 <exp10> ::= <increment> | <decrement>;
 <exp11> ::= <arrayincrement> | <arraydecrement>;
 
@@ -317,7 +317,7 @@ KEY_RBRACE: "}"
   | KEY_TRUE
   | KEY_FALSE
   | KEY_NULL
-  | KEY_LPAREN #11 <exp> KEY_RPAREN #12
+  | KEY_LPAREN #12 <exp> KEY_RPAREN #13
   | <exp10>
   | <exp11>
   | <funccall>
