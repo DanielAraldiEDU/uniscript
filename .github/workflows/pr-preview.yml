@@ -2,19 +2,26 @@ name: Deploy Preview (PR)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: read
+  deployments: write
   pages: write
   id-token: write
 
 jobs:
-  build:
+  preview:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
+    outputs:
+      slug: ${{ steps.slug.outputs.slug }}
+      preview_url: ${{ steps.prepare.outputs.preview_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build WASM via Docker
         run: make wasm-docker
@@ -34,20 +41,149 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Compute preview slug
+        id: slug
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.pull_request.head.ref }}"
+          slug=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$slug" ]; then
+            slug="pr-${{ github.event.pull_request.number }}"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Pages snapshot with preview
+        id: prepare
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          set -euo pipefail
+          repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}.git"
+          token='${{ github.token }}'
+          auth_url="${repo_url/https:\/\//https://x-access-token:${token}@}"
+          if git ls-remote --exit-code "$auth_url" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$auth_url" pages-root
+          else
+            mkdir -p pages-root
+          fi
+          rm -rf "pages-root/$SLUG"
+          mkdir -p "pages-root/$SLUG"
+          rsync -a --delete web/dist/ "pages-root/$SLUG/"
+          if [ -d pages-root/.git ]; then
+            rm -rf pages-root/.git
+          fi
+          if [ -f pages-root/CNAME ]; then
+            base="https://$(head -n1 pages-root/CNAME | tr -d '\r\n')"
+          else
+            base="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          fi
+          base="${base%/}"
+          echo "preview_url=$base/$SLUG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish preview link
+        run: |
+          echo "Preview disponível em [${{ steps.prepare.outputs.preview_url }}](${{ steps.prepare.outputs.preview_url }})" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: pages-root
 
   deploy:
-    needs: build
+    if: github.event.action != 'closed'
+    needs: preview
     runs-on: ubuntu-latest
     environment:
       name: pr-${{ github.event.pull_request.number }}
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ needs.preview.outputs.preview_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
         with:
-          branch: gh-pages-pr-${{ github.event.pull_request.number }}
+          branch: gh-pages
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute preview slug
+        id: slug
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.pull_request.head.ref }}"
+          slug=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$slug" ]; then
+            slug="pr-${{ github.event.pull_request.number }}"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Pages snapshot without preview
+        id: prepare
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          set -euo pipefail
+          repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}.git"
+          token='${{ github.token }}'
+          auth_url="${repo_url/https:\/\//https://x-access-token:${token}@}"
+          if ! git ls-remote --exit-code "$auth_url" gh-pages >/dev/null 2>&1; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git clone --depth 1 --branch gh-pages "$auth_url" pages-root
+          if [ -d pages-root/.git ]; then
+            rm -rf pages-root/.git
+          fi
+          if [ -d "pages-root/$SLUG" ]; then
+            rm -rf "pages-root/$SLUG"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            if [ -f pages-root/CNAME ]; then
+              base="https://$(head -n1 pages-root/CNAME | tr -d '\r\n')"
+            else
+              base="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+            fi
+            base="${base%/}"
+            echo "preview_url=$base/$SLUG" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifact
+        if: steps.prepare.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-root
+
+      - name: Deploy updated Pages snapshot
+        if: steps.prepare.outputs.changed == 'true'
+        uses: actions/deploy-pages@v4
+        with:
+          branch: gh-pages
+
+      - name: Mark deployment inactive
+        if: steps.prepare.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const envName = `pr-${context.payload.pull_request.number}`;
+            const deployments = await github.paginate(github.rest.repos.listDeployments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment: envName,
+            });
+            for (const deployment of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: deployment.id,
+                state: 'inactive',
+                log_url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+                description: 'Preview removido após merge/close.',
+              });
+            }
+
+      - name: Report removal
+        if: steps.prepare.outputs.changed == 'true'
+        run: |
+          echo "Preview removido: ${{ steps.prepare.outputs.preview_url }}" >> "$GITHUB_STEP_SUMMARY"

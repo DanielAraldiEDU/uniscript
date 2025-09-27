@@ -39,6 +39,40 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Restore preview directories
+        env:
+          PAGES_REPO: ${{ github.repository }}
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            pages_dir="$(mktemp -d)"
+            token='${{ github.token }}'
+            repo_url="${GITHUB_SERVER_URL:-https://github.com}/$PAGES_REPO.git"
+            auth_url="${repo_url/https:\/\//https://x-access-token:${token}@}"
+            git clone --depth 1 --branch gh-pages "$auth_url" "$pages_dir"
+            if [ -f "$pages_dir"/CNAME ] && [ ! -f web/dist/CNAME ]; then
+              cp "$pages_dir"/CNAME web/dist/CNAME
+            fi
+            # Preserve previews stored under previews/<slug>
+            if [ -d "$pages_dir"/previews ]; then
+              mkdir -p web/dist/previews
+              rsync -a "$pages_dir"/previews/ web/dist/previews/
+            fi
+            # Preserve previews stored at repo root (legacy layout)
+            find "$pages_dir" -mindepth 1 -maxdepth 1 -type d \( ! -name '.git' ! -name 'previews' \) | while read -r dir; do
+              name="$(basename "$dir")"
+              case "$name" in
+                assets|css|img|js|media|static|fonts)
+                  continue
+                  ;;
+                *)
+                  if [ ! -e "web/dist/$name" ]; then
+                    cp -R "$dir" "web/dist/$name"
+                  fi
+                  ;;
+              esac
+            done
+          fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -54,4 +88,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
