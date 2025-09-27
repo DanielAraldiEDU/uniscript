@@ -9,17 +9,3 @@ void Semantico::executeAction(int action, const Token *token)
               << ", Lexema: " << token->getLexeme() << std::endl;
 }
 
-void Semantico::clearSymbolTable()
-{
-    symbols.clear();
-}
-
-Semantico::Table& Semantico::symbolTable()
-{
-    return symbols;
-}
-
-const Semantico::Table& Semantico::symbolTable() const
-{
-    return symbols;
-}
