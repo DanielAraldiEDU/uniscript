@@ -78,6 +78,14 @@ jobs:
             done
           fi
 
+      - name: Sync gh-pages branch snapshot
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: web/dist
+          keep_files: false
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

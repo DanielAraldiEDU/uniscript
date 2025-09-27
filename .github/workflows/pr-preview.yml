@@ -63,11 +63,11 @@ jobs:
           repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}.git"
           token='${{ github.token }}'
           auth_url="${repo_url/https:\/\//https://x-access-token:${token}@}"
-          if git ls-remote --exit-code "$auth_url" gh-pages >/dev/null 2>&1; then
-            git clone --depth 1 --branch gh-pages "$auth_url" pages-root
-          else
-            mkdir -p pages-root
+          if ! git ls-remote --exit-code "$auth_url" gh-pages >/dev/null 2>&1; then
+            echo '⚠️  Branch gh-pages não encontrada. Rode o deploy da main (workflow "Build and Deploy") ao menos uma vez antes de gerar prévias.' >&2
+            exit 1
           fi
+          git clone --depth 1 --branch gh-pages "$auth_url" pages-root
           rm -rf "pages-root/$SLUG"
           mkdir -p "pages-root/$SLUG"
           rsync -a --delete web/dist/ "pages-root/$SLUG/"
@@ -85,6 +85,15 @@ jobs:
       - name: Publish preview link
         run: |
           echo "Preview disponível em [${{ steps.prepare.outputs.preview_url }}](${{ steps.prepare.outputs.preview_url }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sync gh-pages branch snapshot
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: pages-root
+          keep_files: false
+          full_commit_message: Preview ${{ steps.slug.outputs.slug }} (#${{ github.event.pull_request.number }})
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -130,6 +139,7 @@ jobs:
           token='${{ github.token }}'
           auth_url="${repo_url/https:\/\//https://x-access-token:${token}@}"
           if ! git ls-remote --exit-code "$auth_url" gh-pages >/dev/null 2>&1; then
+            echo '⚠️  Branch gh-pages não encontrada. Nada para limpar.' >&2
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -150,6 +160,16 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Sync gh-pages branch snapshot
+        if: steps.prepare.outputs.changed == 'true'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: pages-root
+          keep_files: false
+          full_commit_message: Cleanup preview ${{ steps.slug.outputs.slug }} (#${{ github.event.pull_request.number }})
 
       - name: Upload artifact
         if: steps.prepare.outputs.changed == 'true'
