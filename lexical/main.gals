@@ -272,7 +272,7 @@ KEY_RBRACE: "}"
 <read> ::= KEY_READ <readscope>;
 
 // Comments
-<comments> ::= KEY_COMMENT_LINE #15 | KEY_COMMENT_MULT_LINE #15;
+<comments> ::= KEY_COMMENT_LINE | KEY_COMMENT_MULT_LINE;
 
 // Finals
 <return> ::= KEY_RETURN <exp> KEY_SEMICOLON
@@ -282,8 +282,8 @@ KEY_RBRACE: "}"
 <throw> ::= KEY_THROW <exp> KEY_SEMICOLON;
 
 // Commands
-<funccall> ::= KEY_VARIABLE #12 KEY_LPAREN KEY_RPAREN
-  | KEY_VARIABLE #12 KEY_LPAREN <attrsparams> KEY_RPAREN;
+<funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN
+  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN;
 
 <functioncall> ::= <funccall> KEY_SEMICOLON;
 
@@ -308,22 +308,22 @@ KEY_RBRACE: "}"
 <exp11> ::= <arrayincrement> | <arraydecrement>;
 
 // Values
-<value> ::= KEY_VARIABLE #1
-  | KEY_DECIMAL #2
-  | KEY_INTEGER #3
-  | KEY_BINARY #4
-  | KEY_HEXADECIMAL #5
-  | KEY_STRING #6
-  | KEY_TRUE #7
-  | KEY_FALSE #7
-  | KEY_NULL #8
+<value> ::= KEY_VARIABLE
+  | KEY_DECIMAL
+  | KEY_INTEGER
+  | KEY_BINARY
+  | KEY_HEXADECIMAL
+  | KEY_STRING
+  | KEY_TRUE
+  | KEY_FALSE
+  | KEY_NULL
   | KEY_LPAREN <exp> KEY_RPAREN
-  | <exp10> #9
-  | <exp11> #10
-  | <funccall> #11
-  | <indexedvalue> #13;
+  | <exp10>
+  | <exp11>
+  | <funccall>
+  | <indexedvalue>;
 
-<indexedvalue> ::= KEY_VARIABLE #14 KEY_LBRACKET <exp> KEY_RBRACKET
+<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET
   | <indexedvalue> KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
