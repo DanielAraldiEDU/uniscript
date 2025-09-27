@@ -78,13 +78,24 @@ jobs:
             done
           fi
 
-      - name: Sync gh-pages branch snapshot
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: web/dist
-          keep_files: false
+      - name: Update gh-pages branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          repo_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          workdir="$(mktemp -d)"
+          rsync -a --delete web/dist/ "$workdir/"
+          cd "$workdir"
+          git init
+          git checkout -b gh-pages
+          git add .
+          git commit -m "Deploy main ${GITHUB_SHA}"
+          git push --force "$repo_url" gh-pages
+          cd - >/dev/null
+          rm -rf "$workdir"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

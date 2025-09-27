@@ -86,14 +86,24 @@ jobs:
         run: |
           echo "Preview disponível em [${{ steps.prepare.outputs.preview_url }}](${{ steps.prepare.outputs.preview_url }})" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Sync gh-pages branch snapshot
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: pages-root
-          keep_files: false
-          full_commit_message: Preview ${{ steps.slug.outputs.slug }} (#${{ github.event.pull_request.number }})
+      - name: Update gh-pages branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLUG: ${{ steps.slug.outputs.slug }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          repo_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          cd pages-root
+          git init
+          git checkout -b gh-pages
+          git add .
+          commit_msg="Preview ${SLUG} (#${PR_NUMBER})"
+          git commit -m "$commit_msg"
+          git push --force "$repo_url" gh-pages
+          rm -rf .git
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -161,15 +171,25 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync gh-pages branch snapshot
+      - name: Update gh-pages branch
         if: steps.prepare.outputs.changed == 'true'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: pages-root
-          keep_files: false
-          full_commit_message: Cleanup preview ${{ steps.slug.outputs.slug }} (#${{ github.event.pull_request.number }})
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLUG: ${{ steps.slug.outputs.slug }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          repo_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          cd pages-root
+          git init
+          git checkout -b gh-pages
+          git add .
+          commit_msg="Cleanup preview ${SLUG} (#${PR_NUMBER})"
+          git commit -m "$commit_msg"
+          git push --force "$repo_url" gh-pages
+          rm -rf .git
 
       - name: Upload artifact
         if: steps.prepare.outputs.changed == 'true'
