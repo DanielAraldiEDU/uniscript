@@ -1,6 +1,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <string>
 
 #include "src/gals/Lexico.h"
 #include "src/gals/Sintatico.h"
@@ -8,6 +9,8 @@
 #include "src/gals/LexicalError.h"
 #include "src/gals/SyntacticError.h"
 #include "src/gals/SemanticError.h"
+
+using SymbolTable = Semantico::Table;
 
 static std::string jsonEscape(const char* s) {
   std::string out;
@@ -35,44 +38,83 @@ static std::string jsonEscape(const char* s) {
   return out;
 }
 
+static std::string symbolTableToJson(const SymbolTable& table) {
+  std::string json = "[";
+  bool first = true;
+  for (const auto& symbol : table) {
+    if (!first) {
+      json += ",";
+    }
+    first = false;
+    json += "{";
+    json += "\"identifier\":\"" + jsonEscape(symbol.identifier.c_str()) + "\"";
+    json += ",\"type\":\"" + jsonEscape(symbol.type.c_str()) + "\"";
+    json += ",\"modality\":\"" + jsonEscape(symbol.modality.c_str()) + "\"";
+    json += ",\"scope\":\"" + jsonEscape(symbol.scope.c_str()) + "\"";
+    json += ",\"declaredLine\":" + std::to_string(symbol.declaredLine);
+    json += ",\"initialized\":" + std::string(symbol.initialized ? "true" : "false");
+    json += ",\"used\":" + std::string(symbol.used ? "true" : "false");
+    json += "}";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string successResponse(const Semantico& sem) {
+  std::string json = "{\"ok\":true,\"symbolTable\":";
+  json += symbolTableToJson(sem.symbolTable());
+  json += "}";
+  return json;
+}
+
+static std::string errorResponse(const char* kind, const char* message, int pos, const Semantico& sem) {
+  std::string json = "{\"ok\":false";
+  if (kind) {
+    json += ",\"kind\":\"";
+    json += jsonEscape(kind);
+    json += "\"";
+  }
+  if (message) {
+    json += ",\"message\":\"";
+    json += jsonEscape(message);
+    json += "\"";
+  }
+  json += ",\"pos\":" + std::to_string(pos);
+  json += ",\"symbolTable\":";
+  json += symbolTableToJson(sem.symbolTable());
+  json += "}";
+  return json;
+}
+
+static char* duplicateString(const std::string& s) {
+  char* out = static_cast<char*>(std::malloc(s.size() + 1));
+  if (!out) {
+    return nullptr;
+  }
+  std::memcpy(out, s.c_str(), s.size() + 1);
+  return out;
+}
+
 extern "C" {
 __attribute__((used))
 char* uniscript_compile(const char* src) {
+  Lexico lex;
+  Sintatico sint;
+  Semantico sem;
+
+  lex.setInput(src);
+
   try {
-    Lexico lex;
-    Sintatico sint;
-    Semantico sem;
-
-    lex.setInput(src);
     sint.parse(&lex, &sem);
-
-    const char* ok = "{\"ok\":true}";
-    char* out = (char*)std::malloc(std::strlen(ok) + 1);
-    std::strcpy(out, ok);
-    return out;
+    return duplicateString(successResponse(sem));
   } catch (const LexicalError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"lexical\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition(), sem));
   } catch (const SyntacticError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"syntactic\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition(), sem));
   } catch (const SemanticError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"semantic\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition(), sem));
   } catch (...) {
-    const char* unk = "{\"ok\":false,\"kind\":\"unknown\",\"message\":\"unknown error\"}";
-    char* out = (char*)std::malloc(std::strlen(unk) + 1);
-    std::strcpy(out, unk);
-    return out;
+    return duplicateString(errorResponse("unknown", "unknown error", -1, sem));
   }
 }
 
