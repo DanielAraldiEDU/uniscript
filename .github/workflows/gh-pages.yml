@@ -52,6 +52,9 @@ jobs:
             if [ -f "$pages_dir"/CNAME ] && [ ! -f web/dist/CNAME ]; then
               cp "$pages_dir"/CNAME web/dist/CNAME
             fi
+            if [ -f "$pages_dir"/.nojekyll ] && [ ! -f web/dist/.nojekyll ]; then
+              cp "$pages_dir"/.nojekyll web/dist/.nojekyll
+            fi
             # Preserve previews stored under previews/<slug>
             if [ -d "$pages_dir"/previews ]; then
               mkdir -p web/dist/previews

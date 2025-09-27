@@ -23,6 +23,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Compute preview slug
+        id: slug
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.pull_request.head.ref }}"
+          slug=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$slug" ]; then
+            slug="pr-${{ github.event.pull_request.number }}"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
       - name: Build WASM via Docker
         run: make wasm-docker
 
@@ -39,18 +50,9 @@ jobs:
 
       - name: Build site
         working-directory: web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/${{ steps.slug.outputs.slug }}/
         run: npm run build
-
-      - name: Compute preview slug
-        id: slug
-        run: |
-          set -euo pipefail
-          branch="${{ github.event.pull_request.head.ref }}"
-          slug=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//')
-          if [ -z "$slug" ]; then
-            slug="pr-${{ github.event.pull_request.number }}"
-          fi
-          echo "slug=$slug" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Pages snapshot with preview
         id: prepare
