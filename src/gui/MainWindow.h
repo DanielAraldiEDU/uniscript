@@ -4,10 +4,11 @@
 #include <QStatusBar>
 #include <QSplitter>
 #include <QLabel>
-//
+
 #include "components/Header/HeaderBar.h"
 #include "components/Editor/CodeEditor.h"
 #include "components/Console/ConsoleView.h"
+#include "components/SymbolTable/SymbolTableView.h"
 
 class MainWindow : public QMainWindow {
 public:
@@ -21,5 +22,6 @@ private:
   CodeEditor* editor;
   ConsoleView* console;
   HeaderBar* header;
+  SymbolTableView* tableView;
   QLabel* cursorPosLabel;
 };

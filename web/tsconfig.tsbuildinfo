@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/global.d.ts","./src/main.tsx","./src/theme.ts","./src/components/console.tsx","./src/components/editor.tsx","./src/components/headerbar.tsx","./src/components/statusbar.tsx","./src/components/symboltable.tsx","./src/wasm/uniscript.ts"],"version":"5.9.2"}
