@@ -294,16 +294,16 @@ KEY_RBRACE: "}"
 <command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
   
 // Expressions
-<exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
-<exp1> ::= <exp1> KEY_AND <exp2> | <exp2>;
-<exp2> ::= <exp2> KEY_BIT_OR <exp3> | <exp3>;
-<exp3> ::= <exp3> KEY_EXPO <exp4> | <exp4>;
-<exp4> ::= <exp4> KEY_BIT_AND <exp5> | <exp5>;
-<exp5> ::= <exp5> <op_rel> <exp6> | <exp6>;
-<exp6> ::= <exp6> <op_bitwise> <exp7> | <exp7>;
-<exp7> ::= <exp7> <op_arit_baixa> <exp8> | <exp8>;
-<exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
-<exp9> ::= <op_neg> <value> | <value>;
+<exp>  ::= <exp> KEY_OR #2 <exp1> | <exp1>;
+<exp1> ::= <exp1> KEY_AND #3 <exp2> | <exp2>;
+<exp2> ::= <exp2> KEY_BIT_OR #4 <exp3> | <exp3>;
+<exp3> ::= <exp3> KEY_EXPO #5 <exp4> | <exp4>;
+<exp4> ::= <exp4> KEY_BIT_AND #6 <exp5> | <exp5>;
+<exp5> ::= <exp5> <op_rel> #7 <exp6> | <exp6>;
+<exp6> ::= <exp6> <op_bitwise> #8 <exp7> | <exp7>;
+<exp7> ::= <exp7> <op_arit_baixa> #9 <exp8> | <exp8>;
+<exp8> ::= <exp8> <op_arit_alta> #10 <exp9> | <exp9> ;
+<exp9> ::= <op_neg> <value> #1 | <value> #1;
 <exp10> ::= <increment> | <decrement>;
 <exp11> ::= <arrayincrement> | <arraydecrement>;
 
@@ -317,14 +317,13 @@ KEY_RBRACE: "}"
   | KEY_TRUE
   | KEY_FALSE
   | KEY_NULL
-  | KEY_LPAREN <exp> KEY_RPAREN
+  | KEY_LPAREN #11 <exp> KEY_RPAREN #12
   | <exp10>
   | <exp11>
   | <funccall>
   | <indexedvalue>;
 
-<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET
-  | <indexedvalue> KEY_LBRACKET <exp> KEY_RBRACKET;
+<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
