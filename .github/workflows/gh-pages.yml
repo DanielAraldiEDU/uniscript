@@ -37,6 +37,8 @@ jobs:
 
       - name: Build site
         working-directory: web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build
 
       - name: Restore preview directories
