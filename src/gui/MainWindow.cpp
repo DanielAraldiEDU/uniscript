@@ -49,7 +49,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   cursorPosLabel->setText(QStringLiteral("Linha 1, Coluna 1"));
   statusBar()->addPermanentWidget(cursorPosLabel);
 
-  editor->setPlainText("print(\"Hello, World!\");");
+  editor->setPlainText("print(\"Hello, World World!\");");
 
 
   connect(editor, &QPlainTextEdit::cursorPositionChanged, this, [this]() {

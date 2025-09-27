@@ -10,7 +10,7 @@ int main () {
   Sintatico sint;
   Semantico sem;
 
-  lex.setInput("print(\"Hello, World!\");");
+  lex.setInput("print(\"Hello, World World!\");");
 
   try {
     sint.parse(&lex, &sem);

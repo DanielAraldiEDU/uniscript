@@ -8,7 +8,7 @@ import { theme } from './theme'
 import { compileSource, posToLineCol } from './wasm/uniscript'
 
 export default function App() {
-  const [code, setCode] = useState<string>('print(\"Hello, World!\");')
+  const [code, setCode] = useState<string>('print(\"Hello, World World!\");')
   const [logs, setLogs] = useState<LogItem[]>([])
   const [cursor, setCursor] = useState({ line: 1, col: 1 })
   const monacoRef = useRef<typeof MonacoNS | null>(null)
