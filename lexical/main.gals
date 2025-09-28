@@ -186,12 +186,12 @@ KEY_RBRACE: "}"
 #Grammar
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
-<emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
+<emptybracket> ::= KEY_LBRACKET #20 KEY_RBRACKET #21;
 <emptybrace> ::= KEY_LBRACE KEY_RBRACE;
-<typeofvalue> ::= KEY_VARIABLE KEY_COLON <type>;
+<typeofvalue> ::= KEY_VARIABLE #22 KEY_COLON <type>;
 
-<deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
-  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
+<deffunction> ::= KEY_FUNCTION KEY_VARIABLE #23 KEY_LPAREN KEY_RPAREN KEY_COLON
+  | KEY_FUNCTION KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
   
 <increment> ::= KEY_VARIABLE KEY_INCREMENT;
 <arrayincrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
@@ -222,8 +222,8 @@ KEY_RBRACE: "}"
 
 // Types
 <primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
-<complextype> ::= <primitivetype> <emptybracket>;
-<type> ::= <primitivetype> #19 | <complextype> #20;
+<complextype> ::= <primitivetype> #19 <emptybracket>;
+<type> ::= <primitivetype> #19 | <complextype>;
 
 // Parameters
 <param> ::= <typeofvalue> | <typeofvalue> KEY_COMMA <param>;
