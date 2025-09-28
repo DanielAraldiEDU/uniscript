@@ -1,7 +1,7 @@
 #Options
 GenerateScanner = true
 GenerateParser = true
-Language = Java
+Language = C++
 ScannerName = Lexico
 ParserName = Sintatico
 SemanticName = Semantico
@@ -216,14 +216,14 @@ KEY_RBRACE: "}"
 <elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
 <ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
 
-<printscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
-<readscope> ::= KEY_LPAREN KEY_VARIABLE KEY_RPAREN KEY_SEMICOLON
-  | KEY_LPAREN <indexedvalue> KEY_RPAREN KEY_SEMICOLON;
+<printscope> ::= KEY_LPAREN <exp> #17 KEY_RPAREN KEY_SEMICOLON;
+<readscope> ::= KEY_LPAREN KEY_VARIABLE #18 KEY_RPAREN KEY_SEMICOLON
+  | KEY_LPAREN <indexedvalue> #18 KEY_RPAREN KEY_SEMICOLON;
 
 // Types
 <primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
 <complextype> ::= <primitivetype> <emptybracket>;
-<type> ::= <primitivetype> | <complextype>;
+<type> ::= <primitivetype> #19 | <complextype> #20;
 
 // Parameters
 <param> ::= <typeofvalue> | <typeofvalue> KEY_COMMA <param>;
@@ -272,7 +272,7 @@ KEY_RBRACE: "}"
 <read> ::= KEY_READ <readscope>;
 
 // Comments
-<comments> ::= KEY_COMMENT_LINE | KEY_COMMENT_MULT_LINE;
+<comments> ::= KEY_COMMENT_LINE #16 | KEY_COMMENT_MULT_LINE #16;
 
 // Finals
 <return> ::= KEY_RETURN <exp> KEY_SEMICOLON
