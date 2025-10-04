@@ -254,11 +254,11 @@ KEY_RBRACE: "}"
   | <arraydecrement> KEY_SEMICOLON;
 
 // Conditionals
-<switchcase> ::= KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE 
-  | KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> <default> KEY_RBRACE;
+<switchcase> ::= KEY_SWITCH #41 KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE 
+  | KEY_SWITCH #41 KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> <default> KEY_RBRACE;
 <cases> ::= <case> <cases> | <case>;
-<case> ::= KEY_CASE <exp> KEY_COLON <commands>;
-<default> ::= KEY_DEFAULT KEY_COLON <commands>;
+<case> ::= KEY_CASE #41 <exp> KEY_COLON <commands>;
+<default> ::= KEY_DEFAULT #41 KEY_COLON <commands>;
 
 <else> ::= KEY_ELSE #34 <statement>;
 <elif> ::= <elifscope> <statement> | <elifscope> <statement> <else>;
