@@ -116,6 +116,7 @@ KEY_RBRACE: "}"
 <whilescope>
 <fortype>
 <forvalue>
+<forparams>
 <forscope>
 <attrstate>
 <multiattrscope>
@@ -138,6 +139,7 @@ KEY_RBRACE: "}"
 <for>
 <attrvalue>
 <attrarray>
+<arraybyindexscope>
 <attrarraybyindex>
 <attr>
 <switchcase>
@@ -195,10 +197,12 @@ KEY_RBRACE: "}"
 <decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT;
 // TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
 <arraydecrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
-<whilescope> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN;
+<whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
-<forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
-<forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
+<forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
+<forparams> ::= KEY_VARIABLE #38 KEY_COLON <fortype> #39 KEY_ATTR <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN
+  | KEY_VARIABLE #38 KEY_ATTR <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
+<forscope> ::= KEY_FOR #37 KEY_LPAREN KEY_VAR <forparams> | KEY_FOR #37 KEY_LPAREN <forparams>;
 <attrstate> ::= KEY_CONST #25 | KEY_VAR #25;
 <multiattrscope> ::= KEY_VARIABLE #26 KEY_COMMA <multiattrscope> | KEY_VARIABLE #26 KEY_COMMA <typeofvalue>;
 <attrscope> ::= <typeofvalue> 
@@ -231,14 +235,14 @@ KEY_RBRACE: "}"
 
 // Loops
 <while> ::= <whilescope> <statement>;
-<dowhile> ::= KEY_DO <statement> <whilescope> KEY_SEMICOLON;
+<dowhile> ::= KEY_DO #35 <statement> <whilescope> KEY_SEMICOLON;
 <for> ::= <forscope> <statement>; 
 
 // Attribution
 <attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
-<attrarraybyindex> ::= <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29 KEY_COMMA <attrarraybyindex>
-  | <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29 KEY_SEMICOLON;
+<arraybyindexscope> ::= <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29;
+<attrarraybyindex> ::= <arraybyindexscope> KEY_COMMA <attrarraybyindex> | <arraybyindexscope> KEY_SEMICOLON;
 
 <attr> ::= <attrscope> KEY_ATTR <attrvalue>
   | <attrscope> KEY_ATTR <attrarray>
