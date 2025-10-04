@@ -283,7 +283,7 @@ KEY_RBRACE: "}"
 <functioncall> ::= <funccall> KEY_SEMICOLON;
 
 <statement> ::= <rowswritten> | <single_command>;
-<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw> | <array>;
+<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw>;
 <program> ::= <commands>;
 <commands> ::= <command> <commands> | <command>;
 <command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
