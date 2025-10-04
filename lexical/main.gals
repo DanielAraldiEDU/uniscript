@@ -33,7 +33,6 @@ KEY_TYPE_INT = KEY_VARIABLE:"int"
 KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
 KEY_TYPE_STRING = KEY_VARIABLE:"string"
 KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
-KEY_TYPE_FUNC = KEY_VARIABLE:"func"
 KEY_TYPE_VOID = KEY_VARIABLE:"void"
 KEY_IF = KEY_VARIABLE:"if"
 KEY_ELSE = KEY_VARIABLE:"else"
@@ -50,7 +49,6 @@ KEY_CASE = KEY_VARIABLE:"case"
 KEY_BREAK = KEY_VARIABLE:"break"
 KEY_DEFAULT = KEY_VARIABLE:"default"
 KEY_THROW = KEY_VARIABLE:"throw"
-KEY_CONTINUE = KEY_VARIABLE:"continue"
 KEY_TRUE = KEY_VARIABLE:"true"
 KEY_FALSE = KEY_VARIABLE:"false"
 KEY_NULL = KEY_VARIABLE:"null"
@@ -121,7 +119,6 @@ KEY_RBRACE: "}"
 <forscope>
 <attrstate>
 <multiattrscope>
-<attrarrayscope>
 <attrscope>
 <arrayvalues>
 <arrayscope>
@@ -156,7 +153,6 @@ KEY_RBRACE: "}"
 <comments>
 <return>
 <break>
-<continue>
 <throw>
 <funccall>
 <functioncall>
@@ -190,38 +186,38 @@ KEY_RBRACE: "}"
 <emptybrace> ::= KEY_LBRACE KEY_RBRACE;
 <typeofvalue> ::= KEY_VARIABLE #22 KEY_COLON <type>;
 
-<deffunction> ::= KEY_FUNCTION KEY_VARIABLE #23 KEY_LPAREN KEY_RPAREN KEY_COLON
-  | KEY_FUNCTION KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
+<deffunction> ::= KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN KEY_RPAREN KEY_COLON
+  | KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
   
-<increment> ::= KEY_VARIABLE KEY_INCREMENT;
+<increment> ::= KEY_VARIABLE #24 KEY_INCREMENT;
+// TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
 <arrayincrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
-<decrement> ::= KEY_VARIABLE KEY_DECREMENT;
+<decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT;
+// TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
 <arraydecrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
 <whilescope> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
 <forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
-<attrstate> ::= KEY_CONST | KEY_VAR;
-<multiattrscope> ::= KEY_VARIABLE KEY_COMMA <multiattrscope> | KEY_VARIABLE KEY_COMMA <typeofvalue>;
-<attrarrayscope> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_COLON <type>;
+<attrstate> ::= KEY_CONST #25 | KEY_VAR #25;
+<multiattrscope> ::= KEY_VARIABLE #26 KEY_COMMA <multiattrscope> | KEY_VARIABLE #26 KEY_COMMA <typeofvalue>;
 <attrscope> ::= <typeofvalue> 
   | <multiattrscope> 
   | <attrstate> <typeofvalue> 
   | <attrstate> <multiattrscope>
-  | <indexedvalue>                  
-  | <attrstate> <indexedvalue>;      
+  | <indexedvalue>;      
 
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
-<elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
-<ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
+<elifscope> ::= KEY_ELIF #34 KEY_LPAREN <exp> KEY_RPAREN;
+<ifscope> ::= KEY_IF #34 KEY_LPAREN <exp> KEY_RPAREN;
 
 <printscope> ::= KEY_LPAREN <exp> #17 KEY_RPAREN KEY_SEMICOLON;
 <readscope> ::= KEY_LPAREN KEY_VARIABLE #18 KEY_RPAREN KEY_SEMICOLON
   | KEY_LPAREN <indexedvalue> #18 KEY_RPAREN KEY_SEMICOLON;
 
 // Types
-<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
+<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_VOID;
 <complextype> ::= <primitivetype> #19 <emptybracket>;
 <type> ::= <primitivetype> #19 | <complextype>;
 
@@ -241,16 +237,16 @@ KEY_RBRACE: "}"
 // Attribution
 <attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
-<attrarraybyindex> ::= <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_COMMA <attrarraybyindex>
-  | <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON;
+<attrarraybyindex> ::= <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29 KEY_COMMA <attrarraybyindex>
+  | <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29 KEY_SEMICOLON;
 
 <attr> ::= <attrscope> KEY_ATTR <attrvalue>
   | <attrscope> KEY_ATTR <attrarray>
   | <attrscope> KEY_ATTR <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
-  | <increment> KEY_SEMICOLON 
+  | <increment> #27 KEY_SEMICOLON 
   | <arrayincrement> KEY_SEMICOLON 
-  | <decrement> KEY_SEMICOLON
+  | <decrement> #27 KEY_SEMICOLON
   | <arraydecrement> KEY_SEMICOLON;
 
 // Conditionals
@@ -260,7 +256,7 @@ KEY_RBRACE: "}"
 <case> ::= KEY_CASE <exp> KEY_COLON <commands>;
 <default> ::= KEY_DEFAULT KEY_COLON <commands>;
 
-<else> ::= KEY_ELSE <statement>;
+<else> ::= KEY_ELSE #34 <statement>;
 <elif> ::= <elifscope> <statement> | <elifscope> <statement> <else>;
 <if> ::= <ifscope> <statement> | <ifscope> <statement> <else> | <ifscope> <statement> <elif>;
 
@@ -275,11 +271,10 @@ KEY_RBRACE: "}"
 <comments> ::= KEY_COMMENT_LINE #16 | KEY_COMMENT_MULT_LINE #16;
 
 // Finals
-<return> ::= KEY_RETURN <exp> KEY_SEMICOLON
-  | KEY_RETURN KEY_SEMICOLON;
-<break> ::= KEY_BREAK KEY_SEMICOLON;
-<continue> ::= KEY_CONTINUE KEY_SEMICOLON;
-<throw> ::= KEY_THROW <exp> KEY_SEMICOLON;
+<return> ::= KEY_RETURN #31 <exp> KEY_SEMICOLON
+  | KEY_RETURN #31 KEY_SEMICOLON;
+<break> ::= KEY_BREAK #32 KEY_SEMICOLON;
+<throw> ::= KEY_THROW #33 <exp> KEY_SEMICOLON;
 
 // Commands
 <funccall> ::= KEY_VARIABLE #14 KEY_LPAREN KEY_RPAREN
@@ -288,7 +283,7 @@ KEY_RBRACE: "}"
 <functioncall> ::= <funccall> KEY_SEMICOLON;
 
 <statement> ::= <rowswritten> | <single_command>;
-<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <throw> | <array>;
+<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw> | <array>;
 <program> ::= <commands>;
 <commands> ::= <command> <commands> | <command>;
 <command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
@@ -323,6 +318,7 @@ KEY_RBRACE: "}"
   | <funccall>
   | <indexedvalue>;
 
+// TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
 <indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
