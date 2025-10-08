@@ -16,6 +16,7 @@ var value: int;
 
 for (var i = 0; i < age; i++) {
   if (i % 10 == 0) {
+    age = i;
     print("Enter with integer value:\n");
     read(value);
   } else print(i);
