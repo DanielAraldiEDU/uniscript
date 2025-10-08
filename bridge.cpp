@@ -10,8 +10,6 @@
 #include "src/gals/SyntacticError.h"
 #include "src/gals/SemanticError.h"
 
-using SymbolTable = Semantico::Table;
-
 static std::string jsonEscape(const char* s) {
   std::string out;
   if (!s) return out;
@@ -38,36 +36,11 @@ static std::string jsonEscape(const char* s) {
   return out;
 }
 
-static std::string symbolTableToJson(const SymbolTable& table) {
-  std::string json = "[";
-  bool first = true;
-  for (const auto& symbol : table) {
-    if (!first) {
-      json += ",";
-    }
-    first = false;
-    json += "{";
-    json += "\"identifier\":\"" + jsonEscape(symbol.identifier.c_str()) + "\"";
-    json += ",\"type\":\"" + jsonEscape(symbol.type.c_str()) + "\"";
-    json += ",\"modality\":\"" + jsonEscape(symbol.modality.c_str()) + "\"";
-    json += ",\"scope\":\"" + jsonEscape(symbol.scope.c_str()) + "\"";
-    json += ",\"declaredLine\":" + std::to_string(symbol.declaredLine);
-    json += ",\"initialized\":" + std::string(symbol.initialized ? "true" : "false");
-    json += ",\"used\":" + std::string(symbol.used ? "true" : "false");
-    json += "}";
-  }
-  json += "]";
-  return json;
+static std::string successResponse() {
+  return "{\"ok\":true}";
 }
 
-static std::string successResponse(const Semantico& sem) {
-  std::string json = "{\"ok\":true,\"symbolTable\":";
-  json += symbolTableToJson(sem.symbolTable());
-  json += "}";
-  return json;
-}
-
-static std::string errorResponse(const char* kind, const char* message, int pos, const Semantico& sem) {
+static std::string errorResponse(const char* kind, const char* message, int pos) {
   std::string json = "{\"ok\":false";
   if (kind) {
     json += ",\"kind\":\"";
@@ -80,8 +53,6 @@ static std::string errorResponse(const char* kind, const char* message, int pos,
     json += "\"";
   }
   json += ",\"pos\":" + std::to_string(pos);
-  json += ",\"symbolTable\":";
-  json += symbolTableToJson(sem.symbolTable());
   json += "}";
   return json;
 }
@@ -106,15 +77,15 @@ char* uniscript_compile(const char* src) {
 
   try {
     sint.parse(&lex, &sem);
-    return duplicateString(successResponse(sem));
+    return duplicateString(successResponse());
   } catch (const LexicalError& e) {
-    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition(), sem));
+    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition()));
   } catch (const SyntacticError& e) {
-    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition(), sem));
+    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition()));
   } catch (const SemanticError& e) {
-    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition(), sem));
+    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition()));
   } catch (...) {
-    return duplicateString(errorResponse("unknown", "unknown error", -1, sem));
+    return duplicateString(errorResponse("unknown", "unknown error", -1));
   }
 }
 
