@@ -51,7 +51,6 @@ KEY_DEFAULT = KEY_VARIABLE:"default"
 KEY_THROW = KEY_VARIABLE:"throw"
 KEY_TRUE = KEY_VARIABLE:"true"
 KEY_FALSE = KEY_VARIABLE:"false"
-KEY_NULL = KEY_VARIABLE:"null"
 
 // COMENTÁRIOS
 KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
@@ -315,7 +314,6 @@ KEY_RBRACE: "}"
   | KEY_STRING
   | KEY_TRUE
   | KEY_FALSE
-  | KEY_NULL
   | KEY_LPAREN #12 <exp> KEY_RPAREN #13
   | <exp10>
   | <exp11>
