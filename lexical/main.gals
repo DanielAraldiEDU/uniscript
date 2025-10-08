@@ -204,11 +204,7 @@ KEY_RBRACE: "}"
 <forscope> ::= KEY_FOR #37 KEY_LPAREN KEY_VAR <forparams> | KEY_FOR #37 KEY_LPAREN <forparams>;
 <attrstate> ::= KEY_CONST #25 | KEY_VAR #25;
 <multiattrscope> ::= KEY_VARIABLE #26 KEY_COMMA <multiattrscope> | KEY_VARIABLE #26 KEY_COMMA <typeofvalue>;
-<attrscope> ::= <typeofvalue> 
-  | <multiattrscope> 
-  | <attrstate> <typeofvalue> 
-  | <attrstate> <multiattrscope>
-  | <indexedvalue>;      
+<attrscope> ::= KEY_VARIABLE #22 | <attrstate> <typeofvalue> | <attrstate> <multiattrscope> | <indexedvalue>;      
 
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
