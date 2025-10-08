@@ -8,9 +8,9 @@
   | KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
   
 <increment> ::= KEY_VARIABLE #24 KEY_INCREMENT;
-<arrayincrement> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
+<arrayincrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
 <decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT;
-<arraydecrement> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
+<arraydecrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
 <whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
@@ -131,7 +131,7 @@
   | <funccall>
   | <indexedvalue>;
 
-<indexedvalue> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET;
+<indexedvalue> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
