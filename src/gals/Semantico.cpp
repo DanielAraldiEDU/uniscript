@@ -82,4 +82,3 @@ void Semantico::executeAction(int action, const Token *token)
       break;
   }
 }
-
