@@ -7,7 +7,7 @@ ParserName = Sintatico
 SemanticName = Semantico
 ScannerCaseSensitive = true
 ScannerTable = Full
-Input = String
+Input = Stream
 Parser = SLR
 #RegularDefinitions
 d:[0-9]
@@ -192,10 +192,10 @@ KEY_RBRACE: "}"
   
 <increment> ::= KEY_VARIABLE #24 KEY_INCREMENT;
 // TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
-<arrayincrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
+<arrayincrement> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
 <decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT;
 // TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
-<arraydecrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
+<arraydecrement> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
 <whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
@@ -317,7 +317,7 @@ KEY_RBRACE: "}"
   | <indexedvalue>;
 
 // TODO: Corrigir ambiguidade no valor de KEY_VARIABLE
-<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET;
+<indexedvalue> ::= KEY_VARIABLE #42 KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 
