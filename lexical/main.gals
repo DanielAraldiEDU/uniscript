@@ -98,7 +98,7 @@
 
 <statement> ::= <rowswritten> | <single_command>;
 <single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw>;
-<program> ::= <commands>;
+<program> ::= <commands> #99;
 <commands> ::= <command> <commands> | <command>;
 <command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
   
