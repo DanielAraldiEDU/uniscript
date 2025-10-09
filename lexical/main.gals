@@ -1,3 +1,187 @@
+#Options
+GenerateScanner = true
+GenerateParser = true
+Language = C++
+ScannerName = Lexico
+ParserName = Sintatico
+SemanticName = Semantico
+ScannerCaseSensitive = true
+ScannerTable = Full
+Input = String
+Parser = SLR
+#RegularDefinitions
+d:[0-9]
+l:[a-zA-Z]
+w:[\ \t\n\s\r]
+#Tokens
+: {w}+
+
+// ENTRADA E SAÍDA
+KEY_PRINT: "print"
+KEY_READ: "read"
+
+// PRIMITIVOS
+KEY_VARIABLE: {l}({l}|{d}|"_")*
+KEY_DECIMAL: {d}+\.{d}+
+KEY_INTEGER: {d}+
+KEY_BINARY: "0b"[01]+
+KEY_HEXADECIMAL: "0x"[0-9a-fA-F]+
+KEY_STRING: \"([^\"\\]|\\.|[\n\r])*\"
+
+// PALAVRAS RESERVADAS
+KEY_TYPE_INT = KEY_VARIABLE:"int"
+KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
+KEY_TYPE_STRING = KEY_VARIABLE:"string"
+KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
+KEY_TYPE_VOID = KEY_VARIABLE:"void"
+KEY_IF = KEY_VARIABLE:"if"
+KEY_ELSE = KEY_VARIABLE:"else"
+KEY_ELIF = KEY_VARIABLE:"elif"
+KEY_DO = KEY_VARIABLE:"do"
+KEY_WHILE = KEY_VARIABLE:"while"
+KEY_FOR = KEY_VARIABLE:"for"
+KEY_RETURN = KEY_VARIABLE:"return"
+KEY_FUNCTION = KEY_VARIABLE:"function"
+KEY_CONST = KEY_VARIABLE:"const"
+KEY_VAR = KEY_VARIABLE:"var"
+KEY_SWITCH = KEY_VARIABLE:"switch"
+KEY_CASE = KEY_VARIABLE:"case"
+KEY_BREAK = KEY_VARIABLE:"break"
+KEY_DEFAULT = KEY_VARIABLE:"default"
+KEY_THROW = KEY_VARIABLE:"throw"
+KEY_TRUE = KEY_VARIABLE:"true"
+KEY_FALSE = KEY_VARIABLE:"false"
+KEY_NULL = KEY_VARIABLE:"null"
+
+// COMENTÁRIOS
+KEY_COMMENT_MULT_LINE: [/][\*].*(˜ | ~|ˆ|\^|.|\n)*[\*][/]
+KEY_COMMENT_LINE: ["/"]["/"][^\r\n]*
+ 
+// OPERADORES ARITMÉTICOS
+KEY_SUM: \+
+KEY_SUB: \-
+KEY_MULT: \*
+KEY_DIV: /
+KEY_MOD: "%"
+KEY_EXPO: "**"
+KEY_INCREMENT: "++"
+KEY_DECREMENT: "--"
+KEY_ATTR: =
+
+// OPERADORES LÓGICOS
+KEY_OR: "||"
+KEY_AND: "&&"
+KEY_NOT: "!"
+
+// OPERADORES RELACIONAIS
+KEY_GREATER: ">"
+KEY_LESSER: "<"
+KEY_GREATER_EQUAL: ">="
+KEY_LESSER_EQUAL: "<="
+KEY_EQUAL: "=="
+KEY_NOT_EQUAL: "!="
+
+// OPERADORES BIT A BIT
+KEY_BIT_SR: ">>"
+KEY_BIT_SL: "<<"
+KEY_BIT_AND: "&"
+KEY_BIT_OR: "|"
+KEY_NEGACAO: "!"
+KEY_BIT_XOR: \^
+KEY_BIT_NOT: "~"
+
+// DELIMITADORES E PONTUADORES
+KEY_DOT: "."
+KEY_COMMA: ","
+KEY_SEMICOLON: ";"
+KEY_COLON: ":"
+KEY_LPAREN: "("
+KEY_RPAREN: ")"
+KEY_LBRACKET: "["
+KEY_RBRACKET: "]"
+KEY_LBRACE: "{"
+KEY_RBRACE: "}"
+
+#NonTerminals
+<program>
+<rowswritten>
+<emptybracket>
+<emptybrace>
+<typeofvalue>
+<deffunction>
+<increment>
+<arrayincrement>
+<decrement>
+<arraydecrement>
+<whilescope>
+<fortype>
+<forvalue>
+<forparams>
+<forscope>
+<attrstate>
+<multiattrscope>
+<attrscope>
+<arrayvalues>
+<arrayscope>
+<elifscope>
+<ifscope>
+<printscope>
+<readscope>
+<primitivetype>
+<complextype>
+<type>
+<param>
+<params>
+<attrsparams>
+<function>
+<while>
+<dowhile>
+<for>
+<attrvalue>
+<attrarray>
+<arraybyindexscope>
+<attrarraybyindex>
+<attr>
+<switchcase>
+<cases>
+<case>
+<default>
+<else>
+<elif>
+<if>
+<array>
+<print>
+<read>
+<comments>
+<return>
+<break>
+<throw>
+<funccall>
+<functioncall>
+<statement>
+<single_command>
+<commands>
+<command>
+<exp>
+<exp1>
+<exp2>
+<exp3>
+<exp4>
+<exp5>
+<exp6>
+<exp7>
+<exp8>
+<exp9>
+<exp10>
+<exp11>
+<value>
+<indexedvalue>
+<op_rel>
+<op_neg>
+<op_bitwise>
+<op_arit_baixa>
+<op_arit_alta>
+#Grammar
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
 <emptybracket> ::= KEY_LBRACKET #20 KEY_RBRACKET #21;
