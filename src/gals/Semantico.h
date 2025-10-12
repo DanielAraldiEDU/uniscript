@@ -28,15 +28,19 @@ public:
     vector<string> value;
     int scope;
     bool isInitialized;
+    bool isUsed;
     bool isConstant;
     bool isParameter;
     bool isFunction;
     bool isArray;
   };
 
+  static bool isTypeParameter;
   static Variable currentVariable;
+  static vector<Variable> currentParameters;
 
   void resetCurrentVariable();
+  void resetCurrentParameters();
   void executeAction(int action, const Token *token);
   bool isConstant(const string &variableName);
   Type getTypeFromString(const string &typeString);

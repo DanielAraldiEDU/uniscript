@@ -1,16 +1,24 @@
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "Semantico.h"
 #include "Constants.h"
 
 using namespace std;
 
-Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, 0, false, false, false, false, false};
+bool Semantico::isTypeParameter = false;
+Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false};
+vector<Semantico::Variable> Semantico::currentParameters = {};
 
 void Semantico::resetCurrentVariable()
 {
-  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, 0, false, false, false, false, false};
+  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false};
+}
+
+void Semantico::resetCurrentParameters()
+{
+  Semantico::currentParameters.clear();
 }
 
 bool Semantico::isConstant(const string &variableName)
@@ -100,8 +108,19 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 19:
     // TYPE
-    Semantico::currentVariable.type = getTypeFromString(token->getLexeme());
-    Semantico::currentVariable.isInitialized = false;
+    if (Semantico::isTypeParameter)
+    {
+      Semantico::Variable currentParameter = Semantico::currentParameters.back();
+      currentParameter.type = getTypeFromString(token->getLexeme());
+      currentParameter.isUsed = false;
+      Semantico::currentParameters[Semantico::currentParameters.size() - 1] = currentParameter;
+      Semantico::isTypeParameter = false;
+    }
+    else
+    {
+      Semantico::currentVariable.type = getTypeFromString(token->getLexeme());
+      Semantico::currentVariable.isInitialized = false;
+    }
     break;
   case 20:
     // OPEN BRACKET
@@ -112,7 +131,16 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 22:
     // ATTRIBUTION
-    Semantico::currentVariable.name = token->getLexeme();
+    if (Semantico::currentVariable.isFunction)
+    {
+      Semantico::currentParameters.push_back({token->getLexeme(), Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false});
+      Semantico::isTypeParameter = true;
+    }
+    else
+    {
+      Semantico::currentVariable.name = token->getLexeme();
+      Semantico::isTypeParameter = false;
+    }
     break;
   case 23:
     // FUNCTION DECLARATION
@@ -176,20 +204,6 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 42:
     // SEMICOLON
-    cout << "Name: " << currentVariable.name << endl;
-    cout << "Type: " << currentVariable.type << endl;
-    cout << "Value: ";
-    for (const auto &value : Semantico::currentVariable.value)
-    {
-      cout << value << " ";
-    }
-    cout << endl
-         << "Scope: " << currentVariable.scope << endl;
-    cout << "Is Parameter: " << currentVariable.isParameter << endl;
-    cout << "Is Initialized: " << currentVariable.isInitialized << endl;
-    cout << "Is Function: " << currentVariable.isFunction << endl;
-    cout << "Is Array: " << currentVariable.isArray << endl;
-
     Semantico::resetCurrentVariable();
     break;
   case 99:
