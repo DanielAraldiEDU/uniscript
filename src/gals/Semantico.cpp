@@ -48,8 +48,11 @@ void Semantico::executeAction(int action, const Token *token)
   {
   case 1:
     // VALUE
-    Semantico::currentVariable.value.push_back(token->getLexeme());
-    Semantico::currentVariable.isInitialized = true;
+    if (!Semantico::currentVariable.isFunction)
+    {
+      Semantico::currentVariable.value.push_back(token->getLexeme());
+      Semantico::currentVariable.isInitialized = true;
+    }
     break;
   case 2:
     // OR
@@ -89,7 +92,8 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 14:
     // FUNCTION CALL
-    Semantico::currentVariable.isInitialized = true;
+    Semantico::currentVariable.isUsed = true;
+    Semantico::currentVariable.isFunction = true;
     break;
   case 15:
     // INDEXED VALUE
@@ -120,6 +124,10 @@ void Semantico::executeAction(int action, const Token *token)
     {
       Semantico::currentVariable.type = getTypeFromString(token->getLexeme());
       Semantico::currentVariable.isInitialized = false;
+      if (Semantico::currentVariable.isFunction)
+      {
+        Semantico::printVariable(Semantico::currentVariable);
+      }
     }
     break;
   case 20:
@@ -204,6 +212,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 42:
     // SEMICOLON
+    Semantico::printVariable(Semantico::currentVariable);
     Semantico::resetCurrentVariable();
     break;
   case 99:
@@ -213,4 +222,47 @@ void Semantico::executeAction(int action, const Token *token)
     cout << "Unknown semantic action" << endl;
     break;
   }
+}
+
+void Semantico::printVariable(const Variable &variable)
+{
+  cout << "Variable Name: " << variable.name << endl;
+  cout << "Type: ";
+  switch (variable.type)
+  {
+  case Semantico::Type::INT:
+    cout << "int";
+    break;
+  case Semantico::Type::FLOAT:
+    cout << "float";
+    break;
+  case Semantico::Type::STRING:
+    cout << "string";
+    break;
+  case Semantico::Type::BOOLEAN:
+    cout << "bool";
+    break;
+  case Semantico::Type::VOID:
+    cout << "void";
+    break;
+  default:
+    cout << "nullable";
+    break;
+  }
+  cout << endl;
+
+  cout << "Value: ";
+  for (const auto &value : variable.value)
+  {
+    cout << value << " ";
+  }
+  cout << endl;
+
+  cout << "Scope: " << variable.scope << endl;
+  cout << "Is Initialized: " << (variable.isInitialized ? "true" : "false") << endl;
+  cout << "Is Used: " << (variable.isUsed ? "true" : "false") << endl;
+  cout << "Is Constant: " << (variable.isConstant ? "true" : "false") << endl;
+  cout << "Is Parameter: " << (variable.isParameter ? "true" : "false") << endl;
+  cout << "Is Function: " << (variable.isFunction ? "true" : "false") << endl;
+  cout << "Is Array: " << (variable.isArray ? "true" : "false") << endl;
 }

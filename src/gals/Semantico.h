@@ -41,6 +41,7 @@ public:
 
   void resetCurrentVariable();
   void resetCurrentParameters();
+  void printVariable(const Variable &variable);
   void executeAction(int action, const Token *token);
   bool isConstant(const string &variableName);
   Type getTypeFromString(const string &typeString);
