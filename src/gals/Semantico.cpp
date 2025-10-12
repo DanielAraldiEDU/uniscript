@@ -44,6 +44,8 @@ Semantico::Type Semantico::getTypeFromString(const string &typeString)
 
 void Semantico::executeAction(int action, const Token *token)
 {
+  string currentValue;
+
   switch (action)
   {
   case 1:
@@ -108,6 +110,10 @@ void Semantico::executeAction(int action, const Token *token)
     }
     break;
   case 18:
+    cin >> currentValue;
+
+    Semantico::currentVariable.value.clear();
+    Semantico::currentVariable.value.push_back(currentValue);
     // READ
     break;
   case 19:
