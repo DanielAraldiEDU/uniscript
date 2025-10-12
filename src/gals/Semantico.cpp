@@ -99,6 +99,8 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 15:
     // INDEXED VALUE
+    Semantico::currentVariable.name = token->getLexeme();
+    break;
   case 16:
     // COMMENTS
     break;
@@ -161,7 +163,8 @@ void Semantico::executeAction(int action, const Token *token)
     Semantico::currentVariable.name = token->getLexeme();
     break;
   case 24:
-    // INCREMENT/DECREMENT
+    // VALUE INCREMENT/DECREMENT
+    Semantico::currentVariable.name = token->getLexeme();
     break;
   case 25:
     // CONST/VAR
@@ -172,6 +175,15 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 27:
     // ATTRIBUTION INCREMENT/DECREMENT
+    Semantico::currentVariable.isInitialized = true;
+    Semantico::currentVariable.isUsed = true;
+
+    if (token->getLexeme() == "++")
+    {
+    }
+    else if (token->getLexeme() == "--")
+    {
+    }
     break;
   case 28:
     // OPEN BRACKET INDEX
