@@ -1,14 +1,71 @@
 #ifndef SEMANTIC_TABLE_H
 #define SEMANTIC_TABLE_H
 
+#include <string>
+#include <vector>
+
+using namespace std;
+
 class SemanticTable {
 public:
     enum Types { INT = 0, FLO, STR, BOO };
     enum Operations { SUM = 0, SUB, MUL, DIV, REL, MOD, POT, AND, OR };
     enum Status { ERR = -1, WAR, OK };
 
+    struct SymbolEntry {
+        string name;
+        Types type;
+        bool initialized;
+        bool used;
+        int scope;
+        bool isParameter;
+        int position;
+        bool isArray;
+        bool isFunction;
+        bool isConstant;
+    };
+
     static int const expTable[4][4][9];
     static int const atribTable[4][4];
+
+    static vector<SymbolEntry> symbolTable;
+
+    static const vector<SymbolEntry> &getSymbolTable() {
+        return symbolTable;
+    }
+
+    // Adiciona um símbolo à tabela
+    void addSymbol(const SymbolEntry &entry) {
+        symbolTable.push_back(entry);
+    }
+
+    // Busca um símbolo na tabela, se não encontrar retorna false
+    bool searchSymbol(const string &name) {
+        for (const auto &entry : symbolTable) {
+            if (entry.name == name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void setSymbolUsed(const string &name) {
+        for (auto &entry : symbolTable) {
+            if (entry.name == name) {
+                entry.used = true;
+                return;
+            }
+        }
+    }
+
+    void setSymbolInitialized(const string &name) {
+        for (auto &entry : symbolTable) {
+            if (entry.name == name) {
+                entry.initialized = true;
+                return;
+            }
+        }
+    }
 
     static int resultType(int TP1, int TP2, int OP) {
         if (TP1 < 0 || TP2 < 0 || OP < 0) {
