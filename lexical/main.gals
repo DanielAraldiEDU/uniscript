@@ -198,8 +198,8 @@ KEY_RBRACE: "}"
 <whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
-<forparams> ::= KEY_VARIABLE #38 KEY_COLON <fortype> #39 KEY_ATTR <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN
-  | KEY_VARIABLE #38 KEY_ATTR <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
+<forparams> ::= KEY_VARIABLE #38 KEY_COLON <fortype> #39 KEY_ATTR #7 <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN
+  | KEY_VARIABLE #38 KEY_ATTR #7 <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
 <forscope> ::= KEY_FOR #37 KEY_LPAREN KEY_VAR <forparams> | KEY_FOR #37 KEY_LPAREN <forparams>;
 <attrstate> ::= KEY_CONST #25 | KEY_VAR #25;
 <multiattrscope> ::= KEY_VARIABLE #26 KEY_COMMA <multiattrscope> | KEY_VARIABLE #26 KEY_COMMA <typeofvalue>;
@@ -238,9 +238,9 @@ KEY_RBRACE: "}"
 <arraybyindexscope> ::= <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29;
 <attrarraybyindex> ::= <arraybyindexscope> KEY_COMMA <attrarraybyindex> | <arraybyindexscope> KEY_SEMICOLON;
 
-<attr> ::= <attrscope> KEY_ATTR <attrvalue>
-  | <attrscope> KEY_ATTR <attrarray>
-  | <attrscope> KEY_ATTR <attrarraybyindex>
+<attr> ::= <attrscope> KEY_ATTR #7 <attrvalue>
+  | <attrscope> KEY_ATTR #7 <attrarray>
+  | <attrscope> KEY_ATTR #7 <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
   | <increment> #27 KEY_SEMICOLON 
   | <arrayincrement> KEY_SEMICOLON 
