@@ -191,10 +191,10 @@ KEY_RBRACE: "}"
 <deffunction> ::= KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN KEY_RPAREN KEY_COLON
   | KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
   
-<increment> ::= KEY_VARIABLE #24 KEY_INCREMENT;
-<arrayincrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
-<decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT;
-<arraydecrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
+<increment> ::= KEY_VARIABLE #24 KEY_INCREMENT #27;
+<arrayincrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT #27;
+<decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT #27;
+<arraydecrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT #27;
 <whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
 <forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
@@ -242,9 +242,9 @@ KEY_RBRACE: "}"
   | <attrscope> KEY_ATTR #7 <attrarray>
   | <attrscope> KEY_ATTR #7 <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
-  | <increment> #27 KEY_SEMICOLON 
+  | <increment> KEY_SEMICOLON 
   | <arrayincrement> KEY_SEMICOLON 
-  | <decrement> #27 KEY_SEMICOLON
+  | <decrement> KEY_SEMICOLON
   | <arraydecrement> KEY_SEMICOLON;
 
 // Conditionals
@@ -296,7 +296,7 @@ KEY_RBRACE: "}"
 <exp7> ::= <exp7> <op_arit_baixa> #9 <exp8> | <exp8>;
 <exp8> ::= <exp8> <op_arit_alta> #10 <exp9> | <exp9> ;
 <exp9> ::= <op_neg> #11 <value> #1 | <value> #1;
-<exp10> ::= <increment> | <decrement>;
+<exp10> ::= <increment>| <decrement>;
 <exp11> ::= <arrayincrement> | <arraydecrement>;
 
 // Values
