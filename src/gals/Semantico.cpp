@@ -23,6 +23,8 @@ Semantico::Type Semantico::getTypeFromString(const string &typeString)
     return Semantico::Type::STRING;
   else if (typeString == "bool")
     return Semantico::Type::BOOLEAN;
+  else if (typeString == "void")
+    return Semantico::Type::VOID;
   else
     throw SemanticError("Unknown type: " + typeString);
 }
@@ -74,6 +76,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 14:
     // FUNCTION CALL
+    Semantico::currentVariable.isInitialized = true;
     break;
   case 15:
     // INDEXED VALUE
@@ -108,6 +111,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 23:
     // FUNCTION DECLARATION
+    Semantico::currentVariable.name = token->getLexeme();
     break;
   case 24:
     // INCREMENT/DECREMENT
@@ -130,6 +134,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 30:
     // FUNCTION TYPE
+    Semantico::currentVariable.isFunction = true;
     break;
   case 31:
     // RETURN

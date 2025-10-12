@@ -18,7 +18,8 @@ public:
     INT = 0,
     FLOAT,
     STRING,
-    BOOLEAN
+    BOOLEAN,
+    VOID
   };
   struct Variable
   {
