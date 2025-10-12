@@ -8,6 +8,11 @@ using namespace std;
 
 Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, 0, false, false, false, false, false};
 
+void Semantico::resetCurrentVariable()
+{
+  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, 0, false, false, false, false, false};
+}
+
 bool Semantico::isConstant(const string &variableName)
 {
   return variableName == "const";
@@ -169,8 +174,8 @@ void Semantico::executeAction(int action, const Token *token)
   case 41:
     // SWITCH/CASE/DEFAULT
     break;
-  case 99:
-    // FINAL CODE
+  case 42:
+    // SEMICOLON
     cout << "Name: " << currentVariable.name << endl;
     cout << "Type: " << currentVariable.type << endl;
     cout << "Value: ";
@@ -185,6 +190,10 @@ void Semantico::executeAction(int action, const Token *token)
     cout << "Is Function: " << currentVariable.isFunction << endl;
     cout << "Is Array: " << currentVariable.isArray << endl;
 
+    Semantico::resetCurrentVariable();
+    break;
+  case 99:
+    // FINAL CODE
     break;
   default:
     cout << "Unknown semantic action" << endl;

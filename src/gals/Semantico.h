@@ -36,8 +36,9 @@ public:
 
   static Variable currentVariable;
 
-  bool isConstant(const string &variableName);
+  void resetCurrentVariable();
   void executeAction(int action, const Token *token);
+  bool isConstant(const string &variableName);
   Type getTypeFromString(const string &typeString);
 };
 
