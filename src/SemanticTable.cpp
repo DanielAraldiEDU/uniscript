@@ -3,83 +3,264 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <iostream>
+#include <iomanip>
 
 using namespace std;
 
 class SemanticTable {
 public:
-    enum Types { INT = 0, FLO, STR, BOO };
+    enum Types { INT = 0, FLOAT, STRING, BOOLEAN, VOID };
     enum Operations { SUM = 0, SUB, MUL, DIV, REL, MOD, POT, AND, OR };
     enum Status { ERR = -1, WAR, OK };
 
     struct SymbolEntry {
         string name;
-        Types type;
-        bool initialized;
-        bool used;
-        int scope;
-        bool isParameter;
-        int position;
-        bool isArray;
-        bool isFunction;
-        bool isConstant;
+        Types type = INT;
+        bool hasExplicitType = false;
+        bool initialized = false;
+        bool used = false;
+        int scope = -1;
+        bool isParameter = false;
+        int position = -1;
+        bool isArray = false;
+        bool isFunction = false;
+        bool isConstant = false;
     };
+
+    struct Param {
+        string name;
+        Types type;
+        int position;
+    };
+
+    SemanticTable() { enterScope(); }
+
+    void declare(const SymbolEntry &e) {
+        auto &cur = scopes.back();
+        
+        if (cur.count(e.name)) {
+            diagnostics.push_back(err("Identificador já declarado neste escopo: '" + e.name + "'"));
+            return;
+        }
+
+        SymbolEntry copy = e;
+        copy.scope = (int)scopes.size()-1;
+        int idx = (int)symbolTable.size();
+        symbolTable.push_back(copy);
+        cur[e.name] = idx;
+    }
+
+    void commitStatement(const SymbolEntry &instrucao) {
+        if (instrucao.name.empty() || instrucao.isFunction) {
+            limparTipoPendente();
+            return;
+        }
+
+        int indiceSimbolo = lookupIndex(instrucao.name);
+        if (indiceSimbolo < 0) {
+            tratarNovaDeclaracao(instrucao);
+        } else {
+            tratarUsoExistente(instrucao, indiceSimbolo);
+        }
+
+        limparTipoPendente();
+    }
+
+    void beginFunction(const string& name, Types retType, const vector<Param>& params) {
+        SymbolEntry fun;
+        fun.name = name;
+        fun.type = retType;
+        fun.isFunction = true;
+        fun.hasExplicitType = true;
+        declare(fun);
+        enterScope();
+        for (auto p : params) {
+            SymbolEntry s;
+            s.name = p.name;
+            s.type = p.type;
+            s.isParameter = true;
+            s.position = p.position;
+            s.hasExplicitType = true;
+            declare(s);
+        }
+        openFunctions.push_back(name);
+    }
+
+    // Fecha escopo de função quando apropriado
+    void closeFunction() {
+        if (!openFunctions.empty()) {
+            exitScope();
+            openFunctions.pop_back();
+        }
+    }
+
+    void enterScope() {
+        scopes.emplace_back();
+    }
+
+    void exitScope() {
+        if (scopes.empty()) return;
+
+        auto &cur = scopes.back();
+
+        for (auto &kv : cur) {
+            auto &sym = symbolTable[kv.second];
+            if (!sym.used) {
+                diagnostics.push_back(warn("Identificador declarado e não usado: '" + sym.name + "' (escopo " + to_string(sym.scope) + ")"));
+            }
+        }
+
+        scopes.pop_back();
+    }
+
+    void closeAllScopes() {
+        while (scopes.size() > 1) exitScope();
+        if (scopes.size() == 1) exitScope();
+    }
+
+    void markUseIfDeclared(const string &name) {
+        int idx = lookupIndex(name);
+        if (idx < 0) {
+            diagnostics.push_back(err("Uso de identificador não declarado: '" + name + "'"));
+            return;
+        }
+        symbolTable[idx].used = true;
+        if (!symbolTable[idx].initialized && !symbolTable[idx].isFunction) {
+            diagnostics.push_back(warn("Possível uso sem inicialização: '" + name + "'"));
+        }
+    }
+
+    void noteExprType(Types t) { pendingExpressionType = (int)t; }
+
+    const vector<SymbolEntry> &getSymbolTable() const {
+        return symbolTable;
+    }
+
+    void printTable(std::ostream& os) const {
+        os << "\n==== TABELA DE SÍMBOLOS ====\n";
+        os << left << setw(18) << "Nome"
+           << setw(8)  << "Tipo"
+           << setw(10) << "Modal"
+           << setw(6)  << "Esc."
+           << setw(6)  << "Usado"
+           << setw(12) << "Inicializado"
+           << "\n";
+        os << string(64, '-') << "\n";
+        for (auto &sym : symbolTable) {
+            os << left << setw(18) << sym.name
+               << setw(8)  << typeToStr(sym.type)
+               << setw(10) << (sym.isFunction ? "func" : (sym.isParameter ? "param" : (sym.isArray ? "vetor" : "var")))
+               << setw(6)  << sym.scope
+               << setw(6)  << (sym.used ? "sim" : "nao")
+               << setw(12) << (sym.initialized ? "sim" : "nao")
+               << "\n";
+        }
+        os << string(64, '-') << "\n";
+    }
+
+    void printDiagnostics(std::ostream& os) const {
+        os << "\n==== DIAGNÓSTICOS ====\n";
+        for (auto &d : diagnostics) os << d << "\n";
+        os << string(64, '-') << "\n";
+    }
 
     static int const expTable[4][4][9];
     static int const atribTable[4][4];
 
-    static vector<SymbolEntry> symbolTable;
-
-    static const vector<SymbolEntry> &getSymbolTable() {
-        return symbolTable;
-    }
-
-    // Adiciona um símbolo à tabela
-    void addSymbol(const SymbolEntry &entry) {
-        symbolTable.push_back(entry);
-    }
-
-    // Busca um símbolo na tabela, se não encontrar retorna false
-    bool searchSymbol(const string &name) {
-        for (const auto &entry : symbolTable) {
-            if (entry.name == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void setSymbolUsed(const string &name) {
-        for (auto &entry : symbolTable) {
-            if (entry.name == name) {
-                entry.used = true;
-                return;
-            }
-        }
-    }
-
-    void setSymbolInitialized(const string &name) {
-        for (auto &entry : symbolTable) {
-            if (entry.name == name) {
-                entry.initialized = true;
-                return;
-            }
-        }
-    }
-
     static int resultType(int TP1, int TP2, int OP) {
-        if (TP1 < 0 || TP2 < 0 || OP < 0) {
+        if (TP1 < 0 || TP1 >= 4 || TP2 < 0 || TP2 >= 4 || OP < 0) {
             return ERR;
         }
         return expTable[TP1][TP2][OP];
     }
 
     static int atribType(int TP1, int TP2) {
-        if (TP1 < 0 || TP2 < 0) {
+        if (TP1 < 0 || TP1 >= 4 || TP2 < 0 || TP2 >= 4) {
             return ERR;
         }
         return atribTable[TP1][TP2];
     }
+
+private:
+    vector<unordered_map<string,int>> scopes;
+    vector<SymbolEntry> symbolTable;
+    vector<string> diagnostics;
+    vector<string> openFunctions;
+    int pendingExpressionType = -1;
+
+    void tratarNovaDeclaracao(const SymbolEntry &instrucao) {
+        if (!instrucao.hasExplicitType) {
+            diagnostics.push_back(err("Uso de identificador não declarado: '" + instrucao.name + "'"));
+            return;
+        }
+
+        declare(instrucao);
+
+        int novoIndice = lookupIndex(instrucao.name);
+        if (novoIndice < 0) return;
+
+        if (pendingExpressionType >= 0) {
+            int resultado = atribType((int)symbolTable[novoIndice].type, pendingExpressionType);
+            if (resultado == ERR) {
+                diagnostics.push_back(err("Tipos incompatíveis na inicialização de '" + instrucao.name + "'"));
+            } else {
+                symbolTable[novoIndice].initialized = true;
+                if (resultado == WAR) {
+                    diagnostics.push_back(warn("Conversão implícita na inicialização de '" + instrucao.name + "'"));
+                }
+            }
+        } else if (instrucao.initialized) {
+            symbolTable[novoIndice].initialized = true;
+        }
+    }
+
+    void tratarUsoExistente(const SymbolEntry &instrucao, int indiceSimbolo) {
+        auto &simbolo = symbolTable[indiceSimbolo];
+        simbolo.used = true;
+
+        if (pendingExpressionType >= 0) {
+            int resultado = atribType((int)simbolo.type, pendingExpressionType);
+            if (resultado == ERR) {
+                diagnostics.push_back(err("Tipos incompatíveis na atribuição para '" + instrucao.name + "'"));
+            } else {
+                simbolo.initialized = true;
+                if (resultado == WAR) {
+                    diagnostics.push_back(warn("Possível perda de precisão na atribuição para '" + instrucao.name + "'"));
+                }
+            }
+        } else if (instrucao.initialized) {
+            simbolo.initialized = true;
+        } else if (!simbolo.initialized) {
+            diagnostics.push_back(warn("Possível uso sem inicialização: '" + instrucao.name + "'"));
+        }
+    }
+
+    void limparTipoPendente() {
+        pendingExpressionType = -1;
+    }
+
+    int lookupIndex(const string &name) const {
+        for (int i=(int)scopes.size()-1; i>=0; --i) {
+            auto it = scopes[i].find(name);
+            if (it != scopes[i].end()) return it->second;
+        }
+        return -1;
+    }
+
+    static string typeToStr(Types t) {
+        switch (t) {
+            case INT: return "int";
+            case FLOAT: return "float";
+            case STRING: return "string";
+            case BOOLEAN: return "bool";
+            case VOID: return "void";
+        }
+    }
+
+    static string err(const string& m){ return string("[ERRO] ") + m; }
+    static string warn(const string& m){ return string("[AVISO] ") + m; }
 };
 
 // expTable[Tipo1][Tipo2][Operação]
@@ -89,39 +270,39 @@ int const SemanticTable::expTable[4][4][9] =
               /* SUM,SUB,MUL,DIV,REL,MOD,POT,AND,OR */
 {
 /*INT   */  {
-              {INT,INT,INT,FLO,BOO,INT,INT,INT,INT},   // INT op INT
-              {FLO,FLO,FLO,FLO,BOO,ERR,FLO,INT,INT},   // INT op FLOAT
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,INT,INT},   // INT op STRING
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,INT,INT}    // INT op BOOL
+              {INT,INT,INT,FLOAT,BOOLEAN,INT,INT,INT,INT},   // INT op INT
+              {FLOAT,FLOAT,FLOAT,FLOAT,BOOLEAN,ERR,FLOAT,INT,INT},   // INT op FLOAT
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,INT,INT},   // INT op STRING
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,INT,INT}    // INT op BOOLEAN
             },
 /*FLOAT */  {
-              {FLO,FLO,FLO,FLO,BOO,ERR,FLO,FLO,FLO},   // FLOAT op INT
-              {FLO,FLO,FLO,FLO,BOO,ERR,FLO,FLO,FLO},   // FLOAT op FLOAT
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,FLO,FLO},   // FLOAT op STRING
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,FLO,FLO}    // FLOAT op BOOL
+              {FLOAT,FLOAT,FLOAT,FLOAT,BOOLEAN,ERR,FLOAT,FLOAT,FLOAT},   // FLOAT op INT
+              {FLOAT,FLOAT,FLOAT,FLOAT,BOOLEAN,ERR,FLOAT,FLOAT,FLOAT},   // FLOAT op FLOAT
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,FLOAT,FLOAT},   // FLOAT op STRING
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,FLOAT,FLOAT}    // FLOAT op BOOLEAN
             },
 /*STRING*/  {
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,STR,STR},   // STRING op INT
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,STR,STR},   // STRING op FLOAT
-              {STR,ERR,ERR,ERR,BOO,ERR,ERR,STR,STR},   // STRING op STRING (+ concatenação, REL comparação)
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,STR,STR}    // STRING op BOOL
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,STRING,STRING},   // STRING op INT
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,STRING,STRING},   // STRING op FLOAT
+              {STRING,ERR,ERR,ERR,BOOLEAN,ERR,ERR,STRING,STRING},   // STRING op STRING (+ concatenação)
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,STRING,STRING}    // STRING op BOOLEAN
             },
-/*BOOL  */  {
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,BOO,BOO},   // BOOL op INT
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,BOO,BOO},   // BOOL op FLOAT
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,BOO,BOO},   // BOOL op STRING
-              {ERR,ERR,ERR,ERR,BOO,ERR,ERR,BOO,BOO}    // BOOL op BOOL (REL, AND, OR)
+/*BOOLEAN*/ {
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,BOOLEAN,BOOLEAN},   // BOOLEAN op INT
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,BOOLEAN,BOOLEAN},   // BOOLEAN op FLOAT
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,BOOLEAN,BOOLEAN},   // BOOLEAN op STRING
+              {ERR,ERR,ERR,ERR,BOOLEAN,ERR,ERR,BOOLEAN,BOOLEAN}    // BOOLEAN op BOOLEAN
             }
 };
 
 // atribTable[ESQ][DIR]
 // Retorna OK, WAR ou ERR conforme compatibilidade
 int const SemanticTable::atribTable[4][4] = {
-    /*        INT                FLO                STR                BOO  */
-    /*INT*/  { SemanticTable::OK,  SemanticTable::WAR,  SemanticTable::ERR,  SemanticTable::ERR },
-    /*FLO*/  { SemanticTable::WAR,  SemanticTable::OK,   SemanticTable::ERR,  SemanticTable::ERR },
-    /*STR*/  { SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::OK,   SemanticTable::ERR },
-    /*BOO*/  { SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::ERR,  SemanticTable::OK  }
+    /*        INT                  FLOAT                STRING               BOOLEAN  */
+    /*INT*/    { SemanticTable::OK,  SemanticTable::WAR,  SemanticTable::ERR,  SemanticTable::ERR },
+    /*FLOAT*/  { SemanticTable::WAR, SemanticTable::OK,   SemanticTable::ERR,  SemanticTable::ERR },
+    /*STRING*/ { SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::OK,   SemanticTable::ERR },
+    /*BOOLEAN*/{ SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::ERR,  SemanticTable::OK  }
 };
 
 #endif // SEMANTIC_TABLE_H
