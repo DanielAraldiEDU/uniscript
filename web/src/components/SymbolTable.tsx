@@ -38,7 +38,7 @@ const theme = {
   headerBg: '#1f1f23',
   rowEven: '#18181b',
   rowOdd: '#141417',
-  numberCol: '#27272a'
+  numberCol: '#36363aff'
 }
 
 export default function SymbolTable({ symbols = [] }: Props) {
