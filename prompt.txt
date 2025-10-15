@@ -1,0 +1,23 @@
+// Friday, Play TV
+
+print("Hello World");
+
+var name: string = "Linus Torvalds";
+var age: int = 55;
+
+function isOdd(n: float): bool {
+  return n % 2 == 1;
+}
+
+print(isOdd(42));
+
+var number: int;
+var value: int;
+
+for (var i = 0; i < age; i++) {
+  if (i % 10 == 0) {
+    age = i;
+    print("Enter with integer value:\n");
+    read(value);
+  } else print(i);
+}
