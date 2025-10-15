@@ -1,43 +1,117 @@
-import type { SymbolInfo } from '../wasm/uniscript'
-import { theme } from '../theme'
+import React from 'react'
 
-type Props = {
-  symbols: SymbolInfo[]
+type SymbolEntry = {
+  name: string
+  type: string
+  initialized: boolean
+  used: boolean
+  scope: number
+  isParameter: boolean
+  position: number
+  isArray: boolean
+  isFunction: boolean
+  isConstant: boolean
 }
 
-const columns: Array<{ key: keyof SymbolInfo; label: string }> = [
-  { key: 'identifier', label: 'Identificador' },
+type Props = {
+  symbols: SymbolEntry[]
+}
+
+const columns: Array<{ key: keyof SymbolEntry; label: string }> = [
+  { key: 'name', label: 'Nome' },
   { key: 'type', label: 'Tipo' },
-  { key: 'modality', label: 'Modalidade' },
+  { key: 'initialized', label: 'Inicializada' },
+  { key: 'used', label: 'Usada' },
   { key: 'scope', label: 'Escopo' },
-  { key: 'declaredLine', label: 'Linha decl.' },
-  { key: 'initialized', label: 'Inicializado' },
-  { key: 'used', label: 'Usado' }
+  { key: 'isParameter', label: 'Parâmetro' },
+  { key: 'position', label: 'Posição' },
+  { key: 'isArray', label: 'Vetor' },
+  { key: 'isFunction', label: 'Função' },
+  { key: 'isConstant', label: 'Mutabilidade' }
 ]
 
-export function SymbolTable({ symbols }: Props) {
+const theme = {
+  panel: '#18181b',
+  border: '#27272a',
+  text: '#e4e4e7',
+  subtle: '#71717a',
+  headerBg: '#1f1f23',
+  rowEven: '#18181b',
+  rowOdd: '#141417',
+  numberCol: '#27272a'
+}
+
+export default function SymbolTable({ symbols = [] }: Props) {
+  const displaySymbols = symbols.length > 0 ? symbols : [
+    {
+      name: 'largatixa',
+      type: 'string',
+      initialized: true,
+      used: false,
+      scope: 1,
+      isParameter: false,
+      position: 0,
+      isArray: false,
+      isFunction: true,
+      isConstant: true
+    },
+  ]
+  
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: theme.panel }}>
-      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, fontWeight: 600, fontSize: 14 }}>
-        Tabela de simbolos
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%', 
+      background: theme.panel,
+      borderRadius: '8px',
+      border: `1px solid ${theme.border}`,
+      overflow: 'hidden'
+    }}>
+      <div style={{ 
+        padding: '12px 16px', 
+        borderBottom: `1px solid ${theme.border}`, 
+        background: theme.headerBg
+      }}>
+        <div style={{ fontWeight: 600, fontSize: 15, color: theme.text }}>
+          Tabela de Símbolos
+        </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
+              <th style={{
+                position: 'sticky',
+                left: 0,
+                zIndex: 20,
+                textAlign: 'center',
+                padding: '10px 12px',
+                fontWeight: 600,
+                fontSize: 12,
+                color: theme.subtle,
+                background: theme.headerBg,
+                borderBottom: `2px solid ${theme.border}`,
+                borderRight: `1px solid ${theme.border}`,
+                width: 50
+              }}>
+                #
+              </th>
+
               {columns.map((column) => (
                 <th
                   key={column.key}
                   style={{
                     textAlign: 'left',
-                    padding: '8px 10px',
-                    fontWeight: 500,
+                    padding: '10px 12px',
+                    fontWeight: 600,
                     fontSize: 12,
                     color: theme.subtle,
                     position: 'sticky',
                     top: 0,
-                    background: theme.panel,
-                    borderBottom: `1px solid ${theme.border}`
+                    background: theme.headerBg,
+                    borderBottom: `2px solid ${theme.border}`,
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   {column.label}
@@ -45,24 +119,56 @@ export function SymbolTable({ symbols }: Props) {
               ))}
             </tr>
           </thead>
+
           <tbody>
-            {symbols.length === 0 ? (
+            {displaySymbols.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} style={{ padding: '16px 10px', textAlign: 'center', color: theme.subtle }}>
-                  Tabela vazia. Compile para visualizar os simbolos.
+                <td 
+                  colSpan={columns.length + 1} 
+                  style={{ 
+                    padding: '32px 16px', 
+                    textAlign: 'center', 
+                    color: theme.subtle,
+                    fontSize: 13
+                  }}
+                >
+                  Nenhum símbolo encontrado
                 </td>
               </tr>
             ) : (
-              symbols.map((symbol, index) => (
+              displaySymbols.map((symbol, index) => (
                 <tr
-                  key={`${symbol.identifier}-${index}`}
+                  key={`${symbol.name}-${index}`}
                   style={{
-                    background: index % 2 === 0 ? 'transparent' : '#141417',
+                    background: index % 2 === 0 ? theme.rowEven : theme.rowOdd,
                     borderBottom: `1px solid ${theme.border}`
                   }}
                 >
+                  <td style={{
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 10,
+                    padding: '10px 12px',
+                    textAlign: 'center',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: theme.subtle,
+                    background: theme.numberCol,
+                    borderRight: `1px solid ${theme.border}`
+                  }}>
+                    {index + 1}
+                  </td>
+
                   {columns.map((column) => (
-                    <td key={column.key} style={{ padding: '8px 10px', color: theme.text, whiteSpace: 'nowrap' }}>
+                    <td 
+                      key={column.key} 
+                      style={{ 
+                        padding: '10px 12px', 
+                        color: theme.text, 
+                        whiteSpace: 'nowrap',
+                        fontSize: 13
+                      }}
+                    >
                       {renderCell(column.key, symbol)}
                     </td>
                   ))}
@@ -76,17 +182,65 @@ export function SymbolTable({ symbols }: Props) {
   )
 }
 
-function renderCell(column: keyof SymbolInfo, symbol: SymbolInfo) {
+function renderCell(column: keyof SymbolEntry, symbol: SymbolEntry) {
   switch (column) {
-    case 'declaredLine':
-      return symbol.declaredLine > 0 ? symbol.declaredLine : '-'
+    case 'name':
+      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.name}</span>
+
+    case 'type':
+      return <span style={{ 
+        display: 'inline-block',
+        padding: '2px 8px',
+        background: '#7c3aed20',
+        color: '#a78bfa',
+        borderRadius: 4,
+        fontSize: 12,
+        fontWeight: 500
+      }}>{symbol.type}</span>
+
     case 'initialized':
-      return symbol.initialized ? 'Sim' : 'Nao'
     case 'used':
-      return symbol.used ? 'Sim' : 'Nao'
-    default: {
-      const value = symbol[column]
-      return typeof value === 'string' && value.trim().length > 0 ? value : '-'
-    }
+    case 'isParameter':
+    case 'isArray':
+    case 'isFunction':
+      return symbol[column] ? (
+        <span style={{ color: '#4ade80', fontWeight: 500 }}>sim</span>
+      ) : (
+        <span style={{ color: '#f87171', fontWeight: 500 }}>não</span>
+      )
+
+    case 'isConstant':
+      return symbol.isConstant ? (
+        <span style={{ 
+          display: 'inline-block',
+          padding: '2px 8px',
+          background: '#3b82f620',
+          color: '#60a5fa',
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 600
+        }}>CONST</span>
+      ) : (
+        <span style={{ 
+          display: 'inline-block',
+          padding: '2px 8px',
+          background: '#f59e0b20',
+          color: '#fbbf24',
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 600
+        }}>VAR</span>
+      )
+
+    case 'scope':
+    case 'position':
+      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol[column]}</span>
+
+    default:
+      return symbol[column] ?? '-'
   }
 }
+
+
+
+export { SymbolTable }
