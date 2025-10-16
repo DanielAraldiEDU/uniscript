@@ -7,6 +7,8 @@
 #include <iostream>
 #include <iomanip>
 
+#include "gals/SemanticError.h"
+
 using namespace std;
 
 class SemanticTable {
@@ -72,8 +74,18 @@ public:
             return;
         }
 
-        int indiceSimbolo = lookupIndex(instrucao.name);
-        if (indiceSimbolo < 0) {
+        const int indiceSimbolo = lookupIndex(instrucao.name);
+        const int escopoAtual = scopes.empty() ? -1 : static_cast<int>(scopes.size()) - 1;
+        const bool tentativaDeclaracao = instrucao.hasExplicitType || instrucao.isParameter;
+
+        if (tentativaDeclaracao) {
+            const bool mesmaDeclaracao = indiceSimbolo >= 0 && symbolTable[indiceSimbolo].scope == escopoAtual;
+            if (mesmaDeclaracao) {
+                addError("Identificador já declarado neste escopo: '" + instrucao.name + "'");
+            } else {
+                tratarNovaDeclaracao(instrucao);
+            }
+        } else if (indiceSimbolo < 0) {
             tratarNovaDeclaracao(instrucao);
         } else {
             tratarUsoExistente(instrucao, indiceSimbolo);
@@ -274,7 +286,10 @@ private:
         return -1;
     }
 
-    void addError(const string& message){ diagnostics.push_back({"error", message}); }
+    void addError(const string& message){
+        diagnostics.push_back({"error", message});
+        throw SemanticError(message);
+    }
     void addWarning(const string& message){ diagnostics.push_back({"warning", message}); }
 };
 
