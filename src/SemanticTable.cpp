@@ -72,6 +72,7 @@ public:
         SymbolEntry fun;
         fun.name = name;
         fun.type = retType;
+        fun.initialized = true;
         fun.isFunction = true;
         fun.hasExplicitType = true;
         declare(fun);
@@ -80,6 +81,7 @@ public:
             SymbolEntry s;
             s.name = p.name;
             s.type = p.type;
+            s.initialized = true;
             s.isParameter = true;
             s.position = p.position;
             s.hasExplicitType = true;
@@ -232,7 +234,7 @@ private:
             }
         } else if (instrucao.initialized) {
             simbolo.initialized = true;
-        } else if (!simbolo.initialized) {
+        } else if (!simbolo.initialized && !simbolo.isFunction) {
             diagnostics.push_back(warn("Possível uso sem inicialização: '" + instrucao.name + "'"));
         }
     }
@@ -257,6 +259,7 @@ private:
             case BOOLEAN: return "bool";
             case VOID: return "void";
         }
+        return "?";
     }
 
     static string err(const string& m){ return string("[ERRO] ") + m; }
