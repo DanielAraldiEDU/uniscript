@@ -283,7 +283,7 @@ KEY_RBRACE: "}"
 <single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw>;
 <program> ::= <commands> #99;
 <commands> ::= <command> <commands> | <command>;
-<command> ::= <single_command> #42 | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
+<command> ::= <single_command> #42 | <function> #43 | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
   
 // Expressions
 <exp>  ::= <exp> KEY_OR #2 <exp1> | <exp1>;

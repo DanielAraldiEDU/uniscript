@@ -316,6 +316,9 @@ void Semantico::executeAction(int action, const Token *token)
     // SEMICOLON
     finalizarInstrucao(*this);
     break;
+  case 43:
+    // FUNCTION FINAL
+    break;
   case 99:
     // FINAL CODE
     semanticTable.closeAllScopes();
