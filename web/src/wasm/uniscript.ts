@@ -3,13 +3,22 @@ let modPromise: Promise<any> | null = null
 export type CompileKind = 'lexical' | 'syntactic' | 'semantic' | 'unknown'
 
 export interface SymbolInfo {
-  identifier: string
+  name: string
   type: string
-  modality: string
-  scope: string
-  declaredLine: number
   initialized: boolean
   used: boolean
+  scope: number
+  isParameter: boolean
+  position: number
+  isArray: boolean
+  isFunction: boolean
+  isConstant: boolean
+  modality: string
+}
+
+export interface DiagnosticInfo {
+  severity: 'error' | 'warning' | 'info'
+  message: string
 }
 
 export interface CompileResult {
@@ -18,6 +27,7 @@ export interface CompileResult {
   message?: string
   pos?: number
   symbolTable: SymbolInfo[]
+  diagnostics: DiagnosticInfo[]
 }
 
 export async function compileSource(code: string): Promise<CompileResult> {
@@ -51,25 +61,41 @@ function normalizeCompileResult(raw: any): CompileResult {
   const message = typeof raw?.message === 'string' ? raw.message : undefined
   const pos = typeof raw?.pos === 'number' ? raw.pos : undefined
   const symbolTable = Array.isArray(raw?.symbolTable) ? raw.symbolTable.map(normalizeSymbolInfo) : []
+  const diagnostics = Array.isArray(raw?.diagnostics) ? raw.diagnostics.map(normalizeDiagnosticInfo) : []
 
   return {
     ok: Boolean(raw?.ok),
     kind,
     message,
     pos,
-    symbolTable
+    symbolTable,
+    diagnostics
   }
 }
 
 function normalizeSymbolInfo(raw: any): SymbolInfo {
+  const scopeValue = Number(raw?.scope)
+  const positionValue = Number(raw?.position)
   return {
-    identifier: typeof raw?.identifier === 'string' ? raw.identifier : '',
+    name: typeof raw?.name === 'string' ? raw.name : '',
     type: typeof raw?.type === 'string' ? raw.type : '',
-    modality: typeof raw?.modality === 'string' ? raw.modality : '',
-    scope: typeof raw?.scope === 'string' ? raw.scope : '',
-    declaredLine: typeof raw?.declaredLine === 'number' ? raw.declaredLine : -1,
     initialized: Boolean(raw?.initialized),
-    used: Boolean(raw?.used)
+    used: Boolean(raw?.used),
+    scope: Number.isFinite(scopeValue) ? scopeValue : -1,
+    isParameter: Boolean(raw?.isParameter),
+    position: Number.isFinite(positionValue) ? positionValue : -1,
+    isArray: Boolean(raw?.isArray),
+    isFunction: Boolean(raw?.isFunction),
+    isConstant: Boolean(raw?.isConstant),
+    modality: typeof raw?.modality === 'string' ? raw.modality : ''
+  }
+}
+
+function normalizeDiagnosticInfo(raw: any): DiagnosticInfo {
+  const severity = typeof raw?.severity === 'string' ? raw.severity : 'info'
+  return {
+    severity: severity === 'error' || severity === 'warning' ? severity : 'info',
+    message: typeof raw?.message === 'string' ? raw.message : ''
   }
 }
 

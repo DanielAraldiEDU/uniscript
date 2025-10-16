@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Console as ConsoleComponent, type LogItem } from './components/Console'
 import { Editor } from './components/Editor'
 import { HeaderBar } from './components/HeaderBar'
-import { SymbolTable } from './components/SymbolTable'
 import { StatusBar } from './components/StatusBar'
+import { SymbolTable } from './components/SymbolTable'
 import { theme } from './theme'
 import { compileSource, posToLineCol, type CompileKind, type SymbolInfo } from './wasm/uniscript'
 
@@ -36,7 +36,7 @@ export default function App() {
   async function handleCompile() {
     clearMarkers()
     setLogs([])
-    addLog('Iniciando analise sintetica...', theme.blue)
+    addLog('Iniciando analise semantica...', theme.blue)
     const src = code.trim()
     if (!src) {
       addLog('Nenhum codigo para compilar.', theme.red)
@@ -46,10 +46,31 @@ export default function App() {
     try {
       const result = await compileSource(code)
       setSymbols(result.symbolTable)
-      if (result.ok) {
-        addLog('Analise concluida com sucesso!', theme.green)
+
+      const diagnostics = result.diagnostics ?? []
+      diagnostics.forEach((diag) => {
+        const color = diag.severity === 'error' ? theme.red : diag.severity === 'warning' ? theme.yellow : theme.subtle
+        const prefix = diag.severity === 'error' ? '[ERRO]' : diag.severity === 'warning' ? '[AVISO]' : '[INFO]'
+        addLog(`${prefix} ${diag.message}`, color)
+      })
+
+      const hasDiagnosticErrors = diagnostics.some((diag) => diag.severity === 'error')
+      const hasWarnings = diagnostics.some((diag) => diag.severity === 'warning')
+
+      if (result.ok && !hasDiagnosticErrors) {
+        if (hasWarnings) {
+          addLog('Analise concluida com avisos.', theme.yellow)
+        } else {
+          addLog('Analise concluida com sucesso!', theme.green)
+        }
         return
       }
+
+      if (result.ok && hasDiagnosticErrors) {
+        addLog('ERROR: Foram encontrados erros semanticos. Reveja os avisos acima.', theme.red)
+        return
+      }
+
       const pos = result.pos ?? -1
       const { line, col } = posToLineCol(code, pos)
       const msg = summaryMessage(result.kind, line, col)

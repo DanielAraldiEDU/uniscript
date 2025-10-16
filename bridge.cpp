@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "src/gals/Lexico.h"
 #include "src/gals/Sintatico.h"
@@ -36,8 +37,58 @@ static std::string jsonEscape(const char* s) {
   return out;
 }
 
-static std::string successResponse() {
-  return "{\"ok\":true}";
+static std::string jsonEscape(const std::string& s) {
+  return jsonEscape(s.c_str());
+}
+
+static std::string boolToJson(bool value) {
+  return value ? "true" : "false";
+}
+
+static std::string symbolTableToJson(const std::vector<ExportedSymbol>& symbols) {
+  std::string json = "[";
+  bool first = true;
+  for (const auto& sym : symbols) {
+    if (!first) json += ",";
+    first = false;
+
+    json += "{";
+    json += "\"name\":\"" + jsonEscape(sym.name) + "\"";
+    json += ",\"type\":\"" + jsonEscape(sym.type) + "\"";
+    json += ",\"initialized\":" + boolToJson(sym.initialized);
+    json += ",\"used\":" + boolToJson(sym.used);
+    json += ",\"scope\":" + std::to_string(sym.scope);
+    json += ",\"isParameter\":" + boolToJson(sym.isParameter);
+    json += ",\"position\":" + std::to_string(sym.position);
+    json += ",\"isArray\":" + boolToJson(sym.isArray);
+    json += ",\"isFunction\":" + boolToJson(sym.isFunction);
+    json += ",\"isConstant\":" + boolToJson(sym.isConstant);
+    json += ",\"modality\":\"" + jsonEscape(sym.modality) + "\"";
+    json += "}";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string diagnosticsToJson(const std::vector<ExportedDiagnostic>& diagnostics) {
+  std::string json = "[";
+  bool first = true;
+  for (const auto& d : diagnostics) {
+    if (!first) json += ",";
+    first = false;
+    json += "{\"severity\":\"" + jsonEscape(d.severity) + "\",\"message\":\"" + jsonEscape(d.message) + "\"}";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string successResponse(const std::vector<ExportedSymbol>& symbols,
+                                   const std::vector<ExportedDiagnostic>& diagnostics) {
+  std::string json = "{\"ok\":true";
+  json += ",\"symbolTable\":" + symbolTableToJson(symbols);
+  json += ",\"diagnostics\":" + diagnosticsToJson(diagnostics);
+  json += "}";
+  return json;
 }
 
 static std::string errorResponse(const char* kind, const char* message, int pos) {
@@ -53,6 +104,8 @@ static std::string errorResponse(const char* kind, const char* message, int pos)
     json += "\"";
   }
   json += ",\"pos\":" + std::to_string(pos);
+  json += ",\"symbolTable\":[]";
+  json += ",\"diagnostics\":[]";
   json += "}";
   return json;
 }
@@ -73,18 +126,28 @@ char* uniscript_compile(const char* src) {
   Sintatico sint;
   Semantico sem;
 
+  sem.resetState();
   lex.setInput(src);
 
   try {
     sint.parse(&lex, &sem);
-    return duplicateString(successResponse());
+    finalizeSemanticAnalysis();
+    auto symbols = snapshotSymbolTable();
+    auto diagnostics = snapshotDiagnostics();
+    std::string json = successResponse(symbols, diagnostics);
+    sem.resetState();
+    return duplicateString(json);
   } catch (const LexicalError& e) {
+    sem.resetState();
     return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition()));
   } catch (const SyntacticError& e) {
+    sem.resetState();
     return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition()));
   } catch (const SemanticError& e) {
+    sem.resetState();
     return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition()));
   } catch (...) {
+    sem.resetState();
     return duplicateString(errorResponse("unknown", "unknown error", -1));
   }
 }

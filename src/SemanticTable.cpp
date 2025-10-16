@@ -29,6 +29,11 @@ public:
         bool isConstant = false;
     };
 
+    struct DiagnosticEntry {
+        string severity;
+        string message;
+    };
+
     struct Param {
         string name;
         Types type;
@@ -37,11 +42,20 @@ public:
 
     SemanticTable() { enterScope(); }
 
+    void reset() {
+        scopes.clear();
+        symbolTable.clear();
+        diagnostics.clear();
+        openFunctions.clear();
+        pendingExpressionType = -1;
+        enterScope();
+    }
+
     void declare(const SymbolEntry &e) {
         auto &cur = scopes.back();
         
         if (cur.count(e.name)) {
-            diagnostics.push_back(err("Identificador já declarado neste escopo: '" + e.name + "'"));
+            addError("Identificador já declarado neste escopo: '" + e.name + "'");
             return;
         }
 
@@ -91,7 +105,7 @@ public:
     }
 
     // Fecha escopo de função quando apropriado
-    void closeFunction() {
+    void maybeCloseFunction() {
         if (!openFunctions.empty()) {
             exitScope();
             openFunctions.pop_back();
@@ -110,7 +124,7 @@ public:
         for (auto &kv : cur) {
             auto &sym = symbolTable[kv.second];
             if (!sym.used) {
-                diagnostics.push_back(warn("Identificador declarado e não usado: '" + sym.name + "' (escopo " + to_string(sym.scope) + ")"));
+                addWarning("Identificador declarado e não usado: '" + sym.name + "' (escopo " + to_string(sym.scope) + ")");
             }
         }
 
@@ -125,12 +139,12 @@ public:
     void markUseIfDeclared(const string &name) {
         int idx = lookupIndex(name);
         if (idx < 0) {
-            diagnostics.push_back(err("Uso de identificador não declarado: '" + name + "'"));
+            addError("Uso de identificador não declarado: '" + name + "'");
             return;
         }
         symbolTable[idx].used = true;
         if (!symbolTable[idx].initialized && !symbolTable[idx].isFunction) {
-            diagnostics.push_back(warn("Possível uso sem inicialização: '" + name + "'"));
+            addWarning("Possível uso sem inicialização: '" + name + "'");
         }
     }
 
@@ -139,6 +153,12 @@ public:
     const vector<SymbolEntry> &getSymbolTable() const {
         return symbolTable;
     }
+
+    const vector<DiagnosticEntry> &getDiagnostics() const {
+        return diagnostics;
+    }
+
+    static string typeToStr(Types t);
 
     void printTable(std::ostream& os) const {
         os << "\n==== TABELA DE SÍMBOLOS ====\n";
@@ -164,7 +184,10 @@ public:
 
     void printDiagnostics(std::ostream& os) const {
         os << "\n==== DIAGNÓSTICOS ====\n";
-        for (auto &d : diagnostics) os << d << "\n";
+        for (auto &d : diagnostics) {
+            const char* tag = d.severity == "error" ? "[ERRO] " : "[AVISO] ";
+            os << tag << d.message << "\n";
+        }
         os << string(64, '-') << "\n";
     }
 
@@ -188,13 +211,13 @@ public:
 private:
     vector<unordered_map<string,int>> scopes;
     vector<SymbolEntry> symbolTable;
-    vector<string> diagnostics;
+    vector<DiagnosticEntry> diagnostics;
     vector<string> openFunctions;
     int pendingExpressionType = -1;
 
     void tratarNovaDeclaracao(const SymbolEntry &instrucao) {
         if (!instrucao.hasExplicitType) {
-            diagnostics.push_back(err("Uso de identificador não declarado: '" + instrucao.name + "'"));
+            addError("Uso de identificador não declarado: '" + instrucao.name + "'");
             return;
         }
 
@@ -206,11 +229,11 @@ private:
         if (pendingExpressionType >= 0) {
             int resultado = atribType((int)symbolTable[novoIndice].type, pendingExpressionType);
             if (resultado == ERR) {
-                diagnostics.push_back(err("Tipos incompatíveis na inicialização de '" + instrucao.name + "'"));
+                addError("Tipos incompatíveis na inicialização de '" + instrucao.name + "'");
             } else {
                 symbolTable[novoIndice].initialized = true;
                 if (resultado == WAR) {
-                    diagnostics.push_back(warn("Conversão implícita na inicialização de '" + instrucao.name + "'"));
+                    addWarning("Conversão implícita na inicialização de '" + instrucao.name + "'");
                 }
             }
         } else if (instrucao.initialized) {
@@ -225,17 +248,17 @@ private:
         if (pendingExpressionType >= 0) {
             int resultado = atribType((int)simbolo.type, pendingExpressionType);
             if (resultado == ERR) {
-                diagnostics.push_back(err("Tipos incompatíveis na atribuição para '" + instrucao.name + "'"));
+                addError("Tipos incompatíveis na atribuição para '" + instrucao.name + "'");
             } else {
                 simbolo.initialized = true;
                 if (resultado == WAR) {
-                    diagnostics.push_back(warn("Possível perda de precisão na atribuição para '" + instrucao.name + "'"));
+                    addWarning("Possível perda de precisão na atribuição para '" + instrucao.name + "'");
                 }
             }
         } else if (instrucao.initialized) {
             simbolo.initialized = true;
         } else if (!simbolo.initialized && !simbolo.isFunction) {
-            diagnostics.push_back(warn("Possível uso sem inicialização: '" + instrucao.name + "'"));
+            addWarning("Possível uso sem inicialização: '" + instrucao.name + "'");
         }
     }
 
@@ -251,20 +274,20 @@ private:
         return -1;
     }
 
-    static string typeToStr(Types t) {
-        switch (t) {
-            case INT: return "int";
-            case FLOAT: return "float";
-            case STRING: return "string";
-            case BOOLEAN: return "bool";
-            case VOID: return "void";
-        }
-        return "?";
-    }
-
-    static string err(const string& m){ return string("[ERRO] ") + m; }
-    static string warn(const string& m){ return string("[AVISO] ") + m; }
+    void addError(const string& message){ diagnostics.push_back({"error", message}); }
+    void addWarning(const string& message){ diagnostics.push_back({"warning", message}); }
 };
+
+string SemanticTable::typeToStr(Types t) {
+    switch (t) {
+        case INT: return "int";
+        case FLOAT: return "float";
+        case STRING: return "string";
+        case BOOLEAN: return "bool";
+        case VOID: return "void";
+    }
+    return "?";
+}
 
 // expTable[Tipo1][Tipo2][Operação]
 // Resultado do tipo da expressão (ou ERR)

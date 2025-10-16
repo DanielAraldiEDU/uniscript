@@ -1,25 +1,13 @@
-import React from 'react'
-
-type SymbolEntry = {
-  name: string
-  type: string
-  initialized: boolean
-  used: boolean
-  scope: number
-  isParameter: boolean
-  position: number
-  isArray: boolean
-  isFunction: boolean
-  isConstant: boolean
-}
+import type { SymbolInfo } from '../wasm/uniscript'
 
 type Props = {
-  symbols: SymbolEntry[]
+  symbols: SymbolInfo[]
 }
 
-const columns: Array<{ key: keyof SymbolEntry; label: string }> = [
+const columns: Array<{ key: keyof SymbolInfo; label: string }> = [
   { key: 'name', label: 'Nome' },
   { key: 'type', label: 'Tipo' },
+  { key: 'modality', label: 'Modalidade' },
   { key: 'initialized', label: 'Inicializada' },
   { key: 'used', label: 'Usada' },
   { key: 'scope', label: 'Escopo' },
@@ -42,21 +30,8 @@ const theme = {
 }
 
 export default function SymbolTable({ symbols = [] }: Props) {
-  const displaySymbols = symbols.length > 0 ? symbols : [
-    {
-      name: 'largatixa',
-      type: 'string',
-      initialized: true,
-      used: false,
-      scope: 1,
-      isParameter: false,
-      position: 0,
-      isArray: false,
-      isFunction: true,
-      isConstant: true
-    },
-  ]
-  
+  const displaySymbols = symbols
+
   return (
     <div style={{ 
       display: 'flex', 
@@ -182,7 +157,7 @@ export default function SymbolTable({ symbols = [] }: Props) {
   )
 }
 
-function renderCell(column: keyof SymbolEntry, symbol: SymbolEntry) {
+function renderCell(column: keyof SymbolInfo, symbol: SymbolInfo) {
   switch (column) {
     case 'name':
       return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.name}</span>
@@ -197,6 +172,20 @@ function renderCell(column: keyof SymbolEntry, symbol: SymbolEntry) {
         fontSize: 12,
         fontWeight: 500
       }}>{symbol.type}</span>
+
+    case 'modality':
+      return (
+        <span style={{
+          display: 'inline-block',
+          padding: '2px 8px',
+          background: '#6366f120',
+          color: '#818cf8',
+          borderRadius: 4,
+          fontSize: 12,
+          fontWeight: 500,
+          textTransform: 'uppercase'
+        }}>{symbol.modality ? symbol.modality.toUpperCase() : '-'}</span>
+      )
 
     case 'initialized':
     case 'used':
@@ -233,8 +222,10 @@ function renderCell(column: keyof SymbolEntry, symbol: SymbolEntry) {
       )
 
     case 'scope':
+      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.scope >= 0 ? symbol.scope : '-'}</span>
+
     case 'position':
-      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol[column]}</span>
+      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.position >= 0 ? symbol.position : '-'}</span>
 
     default:
       return symbol[column] ?? '-'

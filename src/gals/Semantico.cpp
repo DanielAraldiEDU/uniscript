@@ -144,6 +144,13 @@ void Semantico::resetCurrentParameters()
   Semantico::isTypeParameter = false;
 }
 
+void Semantico::resetState()
+{
+  semanticTable.reset();
+  resetCurrentVariable();
+  resetCurrentParameters();
+}
+
 bool Semantico::isConstant(const string &variableName)
 {
   return variableName == "const";
@@ -273,7 +280,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 31:
     // RETURN
-    semanticTable.closeFunction();
+    semanticTable.maybeCloseFunction();
     break;
   case 32:
     // BREAK
@@ -362,4 +369,49 @@ void Semantico::printVariable(const Variable &variable)
   cout << "Parâmetro: " << (variable.isParameter ? "sim" : "não") << endl;
   cout << "Função: " << (variable.isFunction ? "sim" : "não") << endl;
   cout << "Vetor: " << (variable.isArray ? "sim" : "não") << endl;
+}
+
+vector<ExportedSymbol> snapshotSymbolTable()
+{
+  vector<ExportedSymbol> exported;
+  const auto &symbols = semanticTable.getSymbolTable();
+  exported.reserve(symbols.size());
+
+  for (const auto &entry : symbols)
+  {
+    ExportedSymbol symbol;
+    symbol.name = entry.name;
+    symbol.type = SemanticTable::typeToStr(entry.type);
+    symbol.initialized = entry.initialized;
+    symbol.used = entry.used;
+    symbol.scope = entry.scope;
+    symbol.isParameter = entry.isParameter;
+    symbol.position = entry.position;
+    symbol.isArray = entry.isArray;
+    symbol.isFunction = entry.isFunction;
+    symbol.isConstant = entry.isConstant;
+    symbol.modality = entry.isFunction ? "func" : (entry.isParameter ? "param" : (entry.isArray ? "vetor" : "var"));
+    exported.push_back(symbol);
+  }
+
+  return exported;
+}
+
+vector<ExportedDiagnostic> snapshotDiagnostics()
+{
+  vector<ExportedDiagnostic> exported;
+  const auto &items = semanticTable.getDiagnostics();
+  exported.reserve(items.size());
+
+  for (const auto &diag : items)
+  {
+    exported.push_back({diag.severity, diag.message});
+  }
+
+  return exported;
+}
+
+void finalizeSemanticAnalysis()
+{
+  semanticTable.closeAllScopes();
 }
