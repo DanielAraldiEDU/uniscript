@@ -73,7 +73,7 @@ export default function App() {
 
       const pos = result.pos ?? -1
       const { line, col } = posToLineCol(code, pos)
-      const msg = summaryMessage(result.kind, line, col)
+      const msg = summaryMessage(result.kind, result.message, line, col)
       addLog(msg, theme.red)
     } catch (e: any) {
       setSymbols([])
@@ -81,16 +81,17 @@ export default function App() {
     }
   }
 
-  function summaryMessage(kind: CompileKind | undefined, line: number, col: number) {
-    const suffix = line > 0 && col > 0 ? ` (linha ${line}, coluna ${col}) ` : ''
+  function summaryMessage(kind: CompileKind | undefined, message: string | undefined, line: number, col: number) {
+    const suffix = line > 0 && col > 0 ? ` (linha ${line}, coluna ${col})` : ''
+    const detail = message && message.trim().length > 0 ? `: ${message.trim()}` : ''
     switch (kind) {
       case 'lexical':
-        return `ERROR: Ocorreu um erro lexico${suffix}`
+        return `ERROR${detail || ': Ocorreu um erro lexico'}${suffix}`
       case 'semantic':
-        return `ERROR: Ocorreu um erro semantico${suffix}`
+        return `ERROR${detail || ': Ocorreu um erro semantico'}${suffix}`
       case 'syntactic':
       default:
-        return `ERROR: Ocorreu um erro na sintaxe ${suffix}`
+        return `ERROR${detail || ': Ocorreu um erro na sintaxe'}${suffix}`
     }
   }
 
