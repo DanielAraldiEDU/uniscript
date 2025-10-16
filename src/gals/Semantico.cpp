@@ -46,7 +46,7 @@ static SemanticTable::Types inferLiteralType(const std::string& lex) {
 
 namespace {
 
-void registrarLiteral(Semantico& semantico, const Token* token) {
+void registrarLiteral(const Token* token) {
   if (!token || Semantico::currentVariable.isFunction) return;
   const string lexema = token->getLexeme();
   Semantico::currentVariable.value.push_back(lexema);
@@ -86,6 +86,7 @@ void aplicarTipo(Semantico& semantico, const Token* token) {
     }
     semanticTable.beginFunction(Semantico::currentVariable.name, retorno, parametros);
     semantico.resetCurrentParameters();
+    semantico.resetCurrentVariable();
   }
 }
 
@@ -94,7 +95,7 @@ void registrarIdentificadorOuParametro(const Token* token) {
   const string nome = token->getLexeme();
 
   if (Semantico::currentVariable.isFunction) {
-    Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false});
+    Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false});
     Semantico::isTypeParameter = true;
   } else {
     Semantico::currentVariable.name = nome;
@@ -122,7 +123,7 @@ void finalizarInstrucao(Semantico& semantico) {
   entrada.isParameter = Semantico::currentVariable.isParameter;
   entrada.position    = -1;
   entrada.isArray     = Semantico::currentVariable.isArray;
-  entrada.isFunction  = Semantico::currentVariable.isFunction;
+  entrada.isFunction  = false;
   entrada.isConstant  = Semantico::currentVariable.isConstant;
   entrada.hasExplicitType = possuiTipo;
 
@@ -170,7 +171,7 @@ void Semantico::executeAction(int action, const Token *token)
   {
   case 1:
     // VALUE
-    registrarLiteral(*this, token);
+    registrarLiteral(token);
     break;
   case 2:  // OR
   case 3:  // AND
@@ -187,13 +188,20 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 14:
     // FUNCTION CALL
+    if (token) {
+      Semantico::currentVariable.name = token->getLexeme();
+    }
+    
+    if (!Semantico::currentVariable.name.empty()) {
+      semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+    }
     Semantico::currentVariable.isUsed = true;
-    Semantico::currentVariable.isFunction = true;
     break;
   case 15:
     // INDEXED VALUE
     Semantico::currentVariable.name = token->getLexeme();
     semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+    Semantico::currentVariable.value.push_back(Semantico::currentVariable.name);
     break;
   case 16:
     // COMMENTS
@@ -202,8 +210,16 @@ void Semantico::executeAction(int action, const Token *token)
     // PRINT
     for (const auto &value : Semantico::currentVariable.value)
     {
+      if (!value.empty() && (std::isalpha(static_cast<unsigned char>(value.front())) || value.front() == '_'))
+      {
+        if (value != "true" && value != "false")
+        {
+          semanticTable.markUseIfDeclared(value);
+        }
+      }
       cout << value << " ";
     }
+    Semantico::currentVariable.isUsed = true;
     break;
   case 18:
     // READ
