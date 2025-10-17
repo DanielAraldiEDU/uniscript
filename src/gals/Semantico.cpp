@@ -15,121 +15,147 @@ bool Semantico::isTypeParameter = false;
 Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false};
 vector<Semantico::Variable> Semantico::currentParameters = {};
 
-
-static SemanticTable::Types inferLiteralType(const std::string& lex) {
-  if (lex == "true" || lex == "false") return SemanticTable::BOOLEAN;
-  if (!lex.empty() && lex.front() == '"' && lex.back() == '"') return SemanticTable::STRING;
-  if (lex.empty()) return SemanticTable::STRING;
+static SemanticTable::Types inferLiteralType(const std::string &lex)
+{
+  if (lex == "true" || lex == "false")
+    return SemanticTable::BOOLEAN;
+  if (!lex.empty() && lex.front() == '"' && lex.back() == '"')
+    return SemanticTable::STRING;
+  if (lex.empty())
+    return SemanticTable::STRING;
 
   std::size_t pos = 0;
   bool hasDigit = false;
   bool hasDot = false;
 
-  if (lex[pos] == '+' || lex[pos] == '-') ++pos;
-  for (; pos < lex.size(); ++pos) {
+  if (lex[pos] == '+' || lex[pos] == '-')
+    ++pos;
+  for (; pos < lex.size(); ++pos)
+  {
     const unsigned char c = static_cast<unsigned char>(lex[pos]);
-    if (std::isdigit(c)) {
+    if (std::isdigit(c))
+    {
       hasDigit = true;
       continue;
     }
-    if (c == '.' && !hasDot) {
+    if (c == '.' && !hasDot)
+    {
       hasDot = true;
       continue;
     }
     return SemanticTable::STRING;
   }
 
-  if (!hasDigit) return SemanticTable::STRING;
-  
+  if (!hasDigit)
+    return SemanticTable::STRING;
+
   return hasDot ? SemanticTable::FLOAT : SemanticTable::INT;
 }
 
-namespace {
+namespace
+{
 
-void registrarLiteral(const Token* token) {
-  if (!token || Semantico::currentVariable.isFunction) return;
-  const string lexema = token->getLexeme();
-  Semantico::currentVariable.value.push_back(lexema);
-  Semantico::currentVariable.isInitialized = true;
-  semanticTable.noteExprType(inferLiteralType(lexema));
-}
-
-void aplicarTipo(Semantico& semantico, const Token* token) {
-  if (!token) return;
-  const auto tipo = semantico.getTypeFromString(token->getLexeme());
-
-  if (Semantico::isTypeParameter) {
-    auto& parametro = Semantico::currentParameters.back();
-    parametro.type = tipo;
-    parametro.isUsed = false;
-    Semantico::isTypeParameter = false;
-    return;
+  void registrarLiteral(const Token *token)
+  {
+    if (!token || Semantico::currentVariable.isFunction)
+      return;
+    const string lexema = token->getLexeme();
+    Semantico::currentVariable.value.push_back(lexema);
+    Semantico::currentVariable.isInitialized = true;
+    semanticTable.noteExprType(inferLiteralType(lexema));
   }
 
-  Semantico::currentVariable.type = tipo;
-  Semantico::currentVariable.isInitialized = false;
+  void aplicarTipo(Semantico &semantico, const Token *token)
+  {
+    if (!token)
+      return;
+    const auto tipo = semantico.getTypeFromString(token->getLexeme());
 
-  if (Semantico::currentVariable.isFunction) {
-    vector<SemanticTable::Param> parametros;
-    parametros.reserve(Semantico::currentParameters.size());
-    for (size_t i = 0; i < Semantico::currentParameters.size(); ++i) {
-      const auto& parametro = Semantico::currentParameters[i];
-      SemanticTable::Types tipoParametro = SemanticTable::INT;
-      if (parametro.type != Semantico::Type::NULLABLE) {
-        tipoParametro = static_cast<SemanticTable::Types>(parametro.type);
+    if (Semantico::isTypeParameter)
+    {
+      auto &parametro = Semantico::currentParameters.back();
+      parametro.type = tipo;
+      parametro.isUsed = false;
+      Semantico::isTypeParameter = false;
+      return;
+    }
+
+    Semantico::currentVariable.type = tipo;
+    Semantico::currentVariable.isInitialized = false;
+
+    if (Semantico::currentVariable.isFunction)
+    {
+      vector<SemanticTable::Param> parametros;
+      parametros.reserve(Semantico::currentParameters.size());
+      for (size_t i = 0; i < Semantico::currentParameters.size(); ++i)
+      {
+        const auto &parametro = Semantico::currentParameters[i];
+        SemanticTable::Types tipoParametro = SemanticTable::INT;
+        if (parametro.type != Semantico::Type::NULLABLE)
+        {
+          tipoParametro = static_cast<SemanticTable::Types>(parametro.type);
+        }
+        parametros.push_back({parametro.name, tipoParametro, static_cast<int>(i)});
       }
-      parametros.push_back({parametro.name, tipoParametro, static_cast<int>(i)});
+      SemanticTable::Types retorno = SemanticTable::INT;
+      if (Semantico::currentVariable.type != Semantico::Type::NULLABLE)
+      {
+        retorno = static_cast<SemanticTable::Types>(Semantico::currentVariable.type);
+      }
+      semanticTable.beginFunction(Semantico::currentVariable.name, retorno, parametros);
+      semantico.resetCurrentParameters();
+      semantico.resetCurrentVariable();
     }
-    SemanticTable::Types retorno = SemanticTable::INT;
-    if (Semantico::currentVariable.type != Semantico::Type::NULLABLE) {
-      retorno = static_cast<SemanticTable::Types>(Semantico::currentVariable.type);
+  }
+
+  void registrarIdentificadorOuParametro(const Token *token)
+  {
+    if (!token)
+      return;
+    const string nome = token->getLexeme();
+
+    if (Semantico::currentVariable.isFunction)
+    {
+      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false});
+      Semantico::isTypeParameter = true;
     }
-    semanticTable.beginFunction(Semantico::currentVariable.name, retorno, parametros);
-    semantico.resetCurrentParameters();
+    else
+    {
+      Semantico::currentVariable.name = nome;
+      Semantico::isTypeParameter = false;
+    }
+  }
+
+  void executarLeitura()
+  {
+    string valor;
+    if (!(cin >> valor))
+      return;
+    Semantico::currentVariable.value.clear();
+    Semantico::currentVariable.value.push_back(valor);
+    semanticTable.noteExprType(SemanticTable::INT);
+  }
+
+  void finalizarInstrucao(Semantico &semantico)
+  {
+    SemanticTable::SymbolEntry entrada;
+    entrada.name = Semantico::currentVariable.name;
+    const bool possuiTipo = Semantico::currentVariable.type != Semantico::Type::NULLABLE;
+    entrada.type = possuiTipo ? static_cast<SemanticTable::Types>(Semantico::currentVariable.type)
+                              : SemanticTable::INT;
+    entrada.initialized = Semantico::currentVariable.isInitialized;
+    entrada.used = Semantico::currentVariable.isUsed;
+    entrada.scope = -1;
+    entrada.isParameter = Semantico::currentVariable.isParameter;
+    entrada.position = -1;
+    entrada.isArray = Semantico::currentVariable.isArray;
+    entrada.isFunction = false;
+    entrada.isConstant = Semantico::currentVariable.isConstant;
+    entrada.hasExplicitType = possuiTipo;
+
+    semanticTable.commitStatement(entrada);
     semantico.resetCurrentVariable();
   }
-}
-
-void registrarIdentificadorOuParametro(const Token* token) {
-  if (!token) return;
-  const string nome = token->getLexeme();
-
-  if (Semantico::currentVariable.isFunction) {
-    Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false});
-    Semantico::isTypeParameter = true;
-  } else {
-    Semantico::currentVariable.name = nome;
-    Semantico::isTypeParameter = false;
-  }
-}
-
-void executarLeitura() {
-  string valor;
-  if (!(cin >> valor)) return;
-  Semantico::currentVariable.value.clear();
-  Semantico::currentVariable.value.push_back(valor);
-  semanticTable.noteExprType(SemanticTable::INT);
-}
-
-void finalizarInstrucao(Semantico& semantico) {
-  SemanticTable::SymbolEntry entrada;
-  entrada.name        = Semantico::currentVariable.name;
-  const bool possuiTipo = Semantico::currentVariable.type != Semantico::Type::NULLABLE;
-  entrada.type        = possuiTipo ? static_cast<SemanticTable::Types>(Semantico::currentVariable.type)
-                                   : SemanticTable::INT;
-  entrada.initialized = Semantico::currentVariable.isInitialized;
-  entrada.used        = Semantico::currentVariable.isUsed;
-  entrada.scope       = -1;
-  entrada.isParameter = Semantico::currentVariable.isParameter;
-  entrada.position    = -1;
-  entrada.isArray     = Semantico::currentVariable.isArray;
-  entrada.isFunction  = false;
-  entrada.isConstant  = Semantico::currentVariable.isConstant;
-  entrada.hasExplicitType = possuiTipo;
-
-  semanticTable.commitStatement(entrada);
-  semantico.resetCurrentVariable();
-}
 }
 
 void Semantico::resetCurrentVariable()
@@ -195,11 +221,13 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 14:
     // FUNCTION CALL
-    if (token) {
+    if (token)
+    {
       Semantico::currentVariable.name = token->getLexeme();
     }
-    
-    if (!Semantico::currentVariable.name.empty()) {
+
+    if (!Semantico::currentVariable.name.empty())
+    {
       semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
     }
     Semantico::currentVariable.isUsed = true;
@@ -318,6 +346,30 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 43:
     // FUNCTION FINAL
+    break;
+  case 44:
+    // IF/ELIF/ELSE FINAL
+    break;
+  case 45:
+    // WHILE FINAL
+    break;
+  case 46:
+    // DO FINAL
+    break;
+  case 47:
+    // DO-WHILE (FROM DO-WHILE) FINAL
+    break;
+  case 48:
+    // FOR FINAL
+    break;
+  case 49:
+    // SWITCH FINAL
+    break;
+  case 50:
+    // CASE (FROM SWITCH-CASE) FINAL
+    break;
+  case 51:
+    // DEFAULT (FROM SWITCH-CASE) FINAL
     break;
   case 99:
     // FINAL CODE
