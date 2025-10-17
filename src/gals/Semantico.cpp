@@ -55,11 +55,100 @@ static SemanticTable::Types inferLiteralType(const std::string &lex)
 namespace
 {
 
-  void registrarLiteral(const Token *token)
+  void finalizarInstrucao(Semantico &semantico);
+
+  enum class ScopeKind
+  {
+    IfBranch,
+    WhileLoop,
+    DoLoop,
+    ForLoop,
+    SwitchRoot,
+    CaseBranch
+  };
+
+  enum class ForHeaderPhase
+  {
+    Init,
+    Condition,
+    Update,
+    Body
+  };
+
+  struct ForHeaderState
+  {
+    ForHeaderPhase phase = ForHeaderPhase::Init;
+    int parenthesisDepth = 0;
+    bool initializerCommitted = false;
+  };
+
+  static vector<ScopeKind> activeScopes;
+  static vector<ForHeaderState> forHeaderStates;
+  static bool waitingDoWhileCondition = false;
+
+  void resetScopeState()
+  {
+    activeScopes.clear();
+    forHeaderStates.clear();
+    waitingDoWhileCondition = false;
+  }
+
+  void openScope(ScopeKind kind)
+  {
+    semanticTable.enterScope();
+    activeScopes.push_back(kind);
+  }
+
+  void closeScope(ScopeKind expected)
+  {
+    if (activeScopes.empty())
+      return;
+    if (activeScopes.back() != expected)
+      return;
+    activeScopes.pop_back();
+    semanticTable.exitScope();
+  }
+
+  ForHeaderState *currentForHeaderState()
+  {
+    if (forHeaderStates.empty())
+      return nullptr;
+    return &forHeaderStates.back();
+  }
+
+  void ensureForInitializerCommitted(Semantico &semantico)
+  {
+    auto *headerState = currentForHeaderState();
+    if (!headerState || headerState->phase != ForHeaderPhase::Init || headerState->initializerCommitted)
+      return;
+
+    if (Semantico::currentVariable.name.empty())
+    {
+      headerState->initializerCommitted = true;
+      headerState->phase = ForHeaderPhase::Condition;
+      return;
+    }
+
+    finalizarInstrucao(semantico);
+    headerState->initializerCommitted = true;
+    headerState->phase = ForHeaderPhase::Condition;
+  }
+
+  void registrarLiteral(Semantico &semantico, const Token *token)
   {
     if (!token || Semantico::currentVariable.isFunction)
       return;
+    ensureForInitializerCommitted(semantico);
     const string lexema = token->getLexeme();
+    if (!lexema.empty())
+    {
+      const unsigned char first = static_cast<unsigned char>(lexema.front());
+      const bool isIdentifier = std::isalpha(first) || first == '_';
+      if (isIdentifier && lexema != "true" && lexema != "false")
+      {
+        semanticTable.markUseIfDeclared(lexema);
+      }
+    }
     Semantico::currentVariable.value.push_back(lexema);
     Semantico::currentVariable.isInitialized = true;
     semanticTable.noteExprType(inferLiteralType(lexema));
@@ -173,6 +262,7 @@ void Semantico::resetCurrentParameters()
 void Semantico::resetState()
 {
   semanticTable.reset();
+  resetScopeState();
   resetCurrentVariable();
   resetCurrentParameters();
 }
@@ -204,7 +294,7 @@ void Semantico::executeAction(int action, const Token *token)
   {
   case 1:
     // VALUE
-    registrarLiteral(token);
+    registrarLiteral(*this, token);
     break;
   case 2:  // OR
   case 3:  // AND
@@ -216,9 +306,31 @@ void Semantico::executeAction(int action, const Token *token)
   case 9:  // ARIT LOWER
   case 10: // ARIT UPPER
   case 11: // NEG
-  case 12: // LEFT PARENTHESIS
-  case 13: // RIGHT PARENTHESIS
     break;
+  case 12: // LEFT PARENTHESIS
+  {
+    auto *headerState = currentForHeaderState();
+    if (headerState && headerState->phase != ForHeaderPhase::Body)
+    {
+      headerState->parenthesisDepth++;
+    }
+    break;
+  }
+  case 13: // RIGHT PARENTHESIS
+  {
+    auto *headerState = currentForHeaderState();
+    if (headerState && headerState->phase != ForHeaderPhase::Body && headerState->parenthesisDepth > 0)
+    {
+      headerState->parenthesisDepth--;
+      if (headerState->parenthesisDepth == 0)
+      {
+        headerState->phase = ForHeaderPhase::Body;
+        semanticTable.discardPendingExpression();
+        resetCurrentVariable();
+      }
+    }
+    break;
+  }
   case 14:
     // FUNCTION CALL
     if (token)
@@ -235,7 +347,13 @@ void Semantico::executeAction(int action, const Token *token)
   case 15:
     // INDEXED VALUE
     Semantico::currentVariable.name = token->getLexeme();
-    semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+    {
+      auto *headerState = currentForHeaderState();
+      if (!(headerState && headerState->phase == ForHeaderPhase::Init && Semantico::currentVariable.value.empty()))
+      {
+        semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+      }
+    }
     Semantico::currentVariable.value.push_back(Semantico::currentVariable.name);
     break;
   case 16:
@@ -317,60 +435,154 @@ void Semantico::executeAction(int action, const Token *token)
     // THROW
     break;
   case 34:
-    // IF/ELIF/ELSE
+    if (token)
+    {
+      const std::string lexema = token->getLexeme();
+      if (lexema == "if" || lexema == "elif" || lexema == "else")
+      {
+        openScope(ScopeKind::IfBranch);
+      }
+    }
+    else
+    {
+      openScope(ScopeKind::IfBranch);
+    }
     break;
   case 35:
-    // DO
+    openScope(ScopeKind::DoLoop);
+    waitingDoWhileCondition = false;
     break;
   case 36:
-    // WHILE
+    if (waitingDoWhileCondition)
+    {
+      waitingDoWhileCondition = false;
+    }
+    else
+    {
+      openScope(ScopeKind::WhileLoop);
+    }
     break;
   case 37:
-    // FOR
+  {
+    openScope(ScopeKind::ForLoop);
+    forHeaderStates.push_back({});
     break;
+  }
   case 38:
-    // FOR VARIABLE
+    if (token)
+    {
+      registrarIdentificadorOuParametro(token);
+    }
     break;
   case 39:
-    // FOR VARIABLE TYPE
+    if (token)
+    {
+      aplicarTipo(*this, token);
+    }
     break;
   case 40:
-    // FOR VALUE
+  {
+    auto *headerState = currentForHeaderState();
+    if (headerState && headerState->phase == ForHeaderPhase::Init)
+    {
+      if (token && !Semantico::currentVariable.isFunction)
+      {
+        const std::string lexema = token->getLexeme();
+        Semantico::currentVariable.value.push_back(lexema);
+        Semantico::currentVariable.isInitialized = true;
+        semanticTable.noteExprType(inferLiteralType(lexema));
+      }
+    }
+    else if (headerState && headerState->phase == ForHeaderPhase::Update)
+    {
+      finalizarInstrucao(*this);
+      headerState->phase = ForHeaderPhase::Body;
+    }
     break;
+  }
   case 41:
-    // SWITCH/CASE/DEFAULT
+    if (token)
+    {
+      const std::string lexema = token->getLexeme();
+      if (lexema == "switch")
+      {
+        openScope(ScopeKind::SwitchRoot);
+      }
+      else if (lexema == "case" || lexema == "default")
+      {
+        openScope(ScopeKind::CaseBranch);
+      }
+    }
     break;
   case 42:
-    // SEMICOLON
+  {
+    auto *headerState = currentForHeaderState();
+    if (headerState && headerState->phase != ForHeaderPhase::Body)
+    {
+      if (headerState->phase == ForHeaderPhase::Init)
+      {
+        finalizarInstrucao(*this);
+        headerState->phase = ForHeaderPhase::Condition;
+      }
+      else if (headerState->phase == ForHeaderPhase::Condition)
+      {
+        semanticTable.discardPendingExpression();
+        resetCurrentVariable();
+        headerState->phase = ForHeaderPhase::Update;
+      }
+      else
+      {
+        finalizarInstrucao(*this);
+      }
+      break;
+    }
     finalizarInstrucao(*this);
     break;
+  }
   case 43:
     // FUNCTION FINAL
     semanticTable.maybeCloseFunction();
     break;
   case 44:
-    // IF/ELIF/ELSE FINAL
+    closeScope(ScopeKind::IfBranch);
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 45:
-    // WHILE FINAL
+    closeScope(ScopeKind::WhileLoop);
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 46:
-    // DO FINAL
+    closeScope(ScopeKind::DoLoop);
+    waitingDoWhileCondition = true;
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 47:
-    // DO-WHILE (FROM DO-WHILE) FINAL
+    waitingDoWhileCondition = false;
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 48:
-    // FOR FINAL
+    closeScope(ScopeKind::ForLoop);
+    if (!forHeaderStates.empty())
+    {
+      forHeaderStates.pop_back();
+    }
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 49:
-    // SWITCH FINAL
+    closeScope(ScopeKind::SwitchRoot);
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 50:
-    // CASE (FROM SWITCH-CASE) FINAL
-    break;
   case 51:
-    // DEFAULT (FROM SWITCH-CASE) FINAL
+    closeScope(ScopeKind::CaseBranch);
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 99:
     // FINAL CODE

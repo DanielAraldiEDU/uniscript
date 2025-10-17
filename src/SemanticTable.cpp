@@ -161,6 +161,7 @@ public:
     }
 
     void noteExprType(Types t) { pendingExpressionType = (int)t; }
+    void discardPendingExpression() { limparTipoPendente(); }
 
     const vector<SymbolEntry> &getSymbolTable() const {
         return symbolTable;
