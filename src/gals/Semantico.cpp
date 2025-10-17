@@ -318,6 +318,7 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 43:
     // FUNCTION FINAL
+    semanticTable.maybeCloseFunction();
     break;
   case 99:
     // FINAL CODE
