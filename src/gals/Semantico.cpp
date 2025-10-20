@@ -12,8 +12,9 @@ using namespace std;
 SemanticTable semanticTable;
 
 bool Semantico::isTypeParameter = false;
-Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false};
+Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false, false};
 vector<Semantico::Variable> Semantico::currentParameters = {};
+std::string Semantico::sourceCode = "";
 
 static SemanticTable::Types inferLiteralType(const std::string &lex)
 {
@@ -93,12 +94,101 @@ namespace
   static vector<ScopeKind> activeScopes;
   static vector<ForHeaderState> forHeaderStates;
   static bool waitingDoWhileCondition = false;
+  struct ArrayLiteralState
+  {
+    SemanticTable::Types declaredType = SemanticTable::INT;
+    bool hasDeclaredType = false;
+    SemanticTable::Types elementType = SemanticTable::INT;
+    bool hasElementType = false;
+  };
+  static vector<ArrayLiteralState> arrayLiteralStates;
+
+  bool hasOpeningBracketBefore(const Token *token)
+  {
+    if (!token)
+      return false;
+    const std::string &src = Semantico::sourceCode;
+    int pos = token->getPosition();
+    if (pos <= 0 || pos > static_cast<int>(src.size()))
+      return false;
+    int i = pos - 1;
+    while (i >= 0 && std::isspace(static_cast<unsigned char>(src[i])))
+      --i;
+    if (i < 0 || src[i] != '[')
+      return false;
+    int j = i - 1;
+    while (j >= 0 && std::isspace(static_cast<unsigned char>(src[j])))
+      --j;
+    if (j < 0)
+      return true;
+    const char before = src[j];
+    if (std::isalnum(static_cast<unsigned char>(before)) || before == '_' || before == ']')
+      return false;
+    return true;
+  }
+
+  bool closesArrayAfter(const Token *token)
+  {
+    if (!token)
+      return false;
+    const std::string &src = Semantico::sourceCode;
+    size_t pos = static_cast<size_t>(token->getPosition()) + token->getLexeme().size();
+    while (pos < src.size())
+    {
+      char c = src[pos];
+      if (std::isspace(static_cast<unsigned char>(c)))
+      {
+        ++pos;
+        continue;
+      }
+      return c == ']';
+    }
+    return false;
+  }
+
+  bool typeHasArraySuffix(const Token *token)
+  {
+    if (!token)
+      return false;
+    const std::string &src = Semantico::sourceCode;
+    size_t pos = static_cast<size_t>(token->getPosition()) + token->getLexeme().size();
+    while (pos < src.size() && std::isspace(static_cast<unsigned char>(src[pos])))
+      ++pos;
+    if (pos >= src.size() || src[pos] != '[')
+      return false;
+    ++pos;
+    while (pos < src.size() && std::isspace(static_cast<unsigned char>(src[pos])))
+      ++pos;
+    if (pos >= src.size() || src[pos] != ']')
+      return false;
+    return true;
+  }
+
+  bool hasIndexingAfter(const Token *token)
+  {
+    if (!token)
+      return false;
+    const std::string &src = Semantico::sourceCode;
+    size_t pos = static_cast<size_t>(token->getPosition()) + token->getLexeme().size();
+    while (pos < src.size())
+    {
+      char c = src[pos];
+      if (std::isspace(static_cast<unsigned char>(c)))
+      {
+        ++pos;
+        continue;
+      }
+      return c == '[';
+    }
+    return false;
+  }
 
   void resetScopeState()
   {
     activeScopes.clear();
     forHeaderStates.clear();
     waitingDoWhileCondition = false;
+    arrayLiteralStates.clear();
   }
 
   void openScope(ScopeKind kind)
@@ -148,9 +238,32 @@ namespace
       return;
     ensureForInitializerCommitted(semantico);
     const string lexema = token->getLexeme();
-    if (lexema == ")" || lexema == "(" || lexema == "]" || lexema == "[" || lexema == "{" || lexema == "}")
+    if (lexema == "[" || lexema == "]")
     {
       return;
+    }
+    if (lexema == ")" || lexema == "(" || lexema == "{" || lexema == "}")
+    {
+      return;
+    }
+    const bool startsArray = hasOpeningBracketBefore(token);
+    if (startsArray)
+    {
+      Semantico::currentVariable.literalIsArray = true;
+      ArrayLiteralState state;
+      if (Semantico::currentVariable.type != Semantico::Type::NULLABLE)
+      {
+        state.hasDeclaredType = true;
+        state.declaredType = static_cast<SemanticTable::Types>(Semantico::currentVariable.type);
+        state.elementType = state.declaredType;
+      }
+      else if (!Semantico::currentVariable.name.empty() && semanticTable.hasSymbol(Semantico::currentVariable.name))
+      {
+        state.hasDeclaredType = true;
+        state.declaredType = semanticTable.getSymbolType(Semantico::currentVariable.name);
+        state.elementType = state.declaredType;
+      }
+      arrayLiteralStates.push_back(state);
     }
     if (!lexema.empty())
     {
@@ -158,12 +271,80 @@ namespace
       const bool isIdentifier = std::isalpha(first) || first == '_';
       if (isIdentifier && lexema != "true" && lexema != "false")
       {
-        semanticTable.markUseIfDeclared(lexema);
+        const bool requiresArray = hasIndexingAfter(token);
+        semanticTable.markUseIfDeclared(lexema, requiresArray);
       }
     }
     Semantico::currentVariable.value.push_back(lexema);
     Semantico::currentVariable.isInitialized = true;
-    semanticTable.noteExprType(inferLiteralType(lexema));
+    const auto literalType = inferLiteralType(lexema);
+    if (!arrayLiteralStates.empty())
+    {
+      auto &state = arrayLiteralStates.back();
+      SemanticTable::Types expectedType = state.hasDeclaredType ? state.declaredType : state.elementType;
+      if (!state.hasElementType)
+      {
+        if (state.hasDeclaredType)
+        {
+          const int compat = SemanticTable::atribType(static_cast<int>(state.declaredType), static_cast<int>(literalType));
+          if (compat != SemanticTable::OK)
+          {
+            throw SemanticError("Tipos incompatíveis no elemento do vetor: esperado '" +
+                                SemanticTable::typeToStr(state.declaredType) + "', encontrado '" +
+                                SemanticTable::typeToStr(literalType) + "'");
+          }
+          state.elementType = state.declaredType;
+        }
+        else
+        {
+          state.elementType = literalType;
+        }
+        state.hasElementType = true;
+      }
+      else
+      {
+        expectedType = state.hasDeclaredType ? state.declaredType : state.elementType;
+        const int compat = SemanticTable::atribType(static_cast<int>(expectedType), static_cast<int>(literalType));
+        if (compat != SemanticTable::OK)
+        {
+          throw SemanticError("Tipos incompatíveis no elemento do vetor: esperado '" +
+                              SemanticTable::typeToStr(expectedType) + "', encontrado '" +
+                              SemanticTable::typeToStr(literalType) + "'");
+        }
+      }
+    }
+    else
+    {
+      semanticTable.noteExprType(literalType);
+    }
+
+    const bool endsArray = closesArrayAfter(token);
+    if (endsArray && !arrayLiteralStates.empty())
+    {
+      ArrayLiteralState state = arrayLiteralStates.back();
+      arrayLiteralStates.pop_back();
+      if (!state.hasElementType)
+      {
+        if (state.hasDeclaredType)
+        {
+          semanticTable.noteExprType(state.declaredType);
+        }
+        else
+        {
+          throw SemanticError("Não é possível inferir o tipo de um vetor vazio");
+        }
+      }
+      else
+      {
+        SemanticTable::Types elemento = state.hasDeclaredType ? state.declaredType : state.elementType;
+        if (!state.hasDeclaredType)
+        {
+          Semantico::currentVariable.type = static_cast<Semantico::Type>(elemento);
+        }
+        semanticTable.noteExprType(elemento);
+      }
+      Semantico::currentVariable.isInitialized = true;
+    }
   }
 
   void aplicarTipo(Semantico &semantico, const Token *token)
@@ -175,14 +356,20 @@ namespace
     if (Semantico::isTypeParameter)
     {
       auto &parametro = Semantico::currentParameters.back();
+      const bool arraySuffix = typeHasArraySuffix(token);
       parametro.type = tipo;
       parametro.isUsed = false;
       Semantico::isTypeParameter = false;
+      parametro.isArray = arraySuffix;
+      parametro.literalIsArray = false;
       return;
     }
 
+    const bool arraySuffix = typeHasArraySuffix(token);
     Semantico::currentVariable.type = tipo;
     Semantico::currentVariable.isInitialized = false;
+    Semantico::currentVariable.isArray = arraySuffix;
+    Semantico::currentVariable.literalIsArray = false;
 
     if (Semantico::currentVariable.isFunction)
     {
@@ -196,7 +383,9 @@ namespace
         {
           tipoParametro = static_cast<SemanticTable::Types>(parametro.type);
         }
-        parametros.push_back({parametro.name, tipoParametro, static_cast<int>(i)});
+        SemanticTable::Param info{parametro.name, tipoParametro, static_cast<int>(i)};
+        info.isArray = parametro.isArray;
+        parametros.push_back(info);
       }
       SemanticTable::Types retorno = SemanticTable::INT;
       if (Semantico::currentVariable.type != Semantico::Type::NULLABLE)
@@ -217,13 +406,16 @@ namespace
 
     if (Semantico::currentVariable.isFunction)
     {
-      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false});
+      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false, false});
       Semantico::isTypeParameter = true;
     }
     else
     {
       Semantico::currentVariable.name = nome;
       Semantico::isTypeParameter = false;
+      Semantico::currentVariable.isArray = semanticTable.isArraySymbol(nome);
+      Semantico::currentVariable.literalIsArray = false;
+      Semantico::currentVariable.type = Semantico::Type::NULLABLE;
     }
   }
 
@@ -254,6 +446,11 @@ namespace
     entrada.isConstant = Semantico::currentVariable.isConstant;
     entrada.hasExplicitType = possuiTipo;
 
+    if (Semantico::currentVariable.literalIsArray && !Semantico::currentVariable.isArray)
+    {
+      throw SemanticError("Variável não declarada como vetor: '" + entrada.name + "'");
+    }
+
     semanticTable.commitStatement(entrada);
     semantico.resetCurrentVariable();
   }
@@ -261,7 +458,7 @@ namespace
 
 void Semantico::resetCurrentVariable()
 {
-  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false};
+  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false, false};
   Semantico::isTypeParameter = false;
 }
 
@@ -277,6 +474,12 @@ void Semantico::resetState()
   resetScopeState();
   resetCurrentVariable();
   resetCurrentParameters();
+  sourceCode.clear();
+}
+
+void Semantico::setSourceCode(const std::string &code)
+{
+  sourceCode = code;
 }
 
 bool Semantico::isConstant(const string &variableName)
@@ -347,26 +550,33 @@ void Semantico::executeAction(int action, const Token *token)
     // FUNCTION CALL
     if (token)
     {
-      Semantico::currentVariable.name = token->getLexeme();
-    }
-
-    if (!Semantico::currentVariable.name.empty())
-    {
-      semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+      const std::string lexema = token->getLexeme();
+      if (Semantico::currentVariable.name.empty())
+      {
+        Semantico::currentVariable.name = lexema;
+      }
+      semanticTable.markUseIfDeclared(lexema);
     }
     Semantico::currentVariable.isUsed = true;
     break;
   case 15:
     // INDEXED VALUE
-    Semantico::currentVariable.name = token->getLexeme();
+    if (token)
     {
-      auto *headerState = currentForHeaderState();
-      if (!(headerState && headerState->phase == ForHeaderPhase::Init && Semantico::currentVariable.value.empty()))
+      const std::string lexema = token->getLexeme();
+      if (Semantico::currentVariable.name.empty())
       {
-        semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+        Semantico::currentVariable.name = lexema;
       }
+      {
+        auto *headerState = currentForHeaderState();
+        if (!(headerState && headerState->phase == ForHeaderPhase::Init && Semantico::currentVariable.value.empty()))
+        {
+          semanticTable.markUseIfDeclared(lexema, true);
+        }
+      }
+      Semantico::currentVariable.value.push_back(lexema);
     }
-    Semantico::currentVariable.value.push_back(Semantico::currentVariable.name);
     break;
   case 16:
     // COMMENTS
@@ -396,7 +606,6 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 20:
     // OPEN BRACKET
-    Semantico::currentVariable.isArray = true;
     break;
   case 21:
     // CLOSE BRACKET
@@ -671,7 +880,6 @@ vector<ExportedSymbol> snapshotSymbolTable()
     symbol.isArray = entry.isArray;
     symbol.isFunction = entry.isFunction;
     symbol.isConstant = entry.isConstant;
-    symbol.modality = SemanticTable::modalityFor(entry);
     exported.push_back(symbol);
   }
 

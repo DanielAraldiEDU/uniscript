@@ -40,6 +40,7 @@ public:
         string name;
         Types type;
         int position;
+        bool isArray = false;
     };
 
     SemanticTable() { enterScope(); }
@@ -74,7 +75,6 @@ public:
             limparTipoPendente();
             return;
         }
-
         const int indiceSimbolo = lookupIndex(instrucao.name);
         const int escopoAtual = scopes.empty() ? -1 : static_cast<int>(scopes.size()) - 1;
         const bool tentativaDeclaracao = instrucao.hasExplicitType || instrucao.isParameter;
@@ -114,6 +114,7 @@ public:
             s.isParameter = true;
             s.position = p.position;
             s.hasExplicitType = true;
+            s.isArray = p.isArray;
             declare(s);
         }
         openFunctions.push_back(name);
@@ -155,7 +156,7 @@ public:
         if (scopes.size() == 1) exitScope();
     }
 
-    void markUseIfDeclared(const string &name) {
+    void markUseIfDeclared(const string &name, bool requireArray = false) {
         int idx = lookupIndex(name);
         if (idx < 0) {
             addError("Uso de identificador não declarado: '" + name + "'");
@@ -168,6 +169,10 @@ public:
                 addError("Identificador não declarado neste escopo: '" + name + "'");
                 return;
             }
+        }
+        if (requireArray && !symbolTable[idx].isArray) {
+            addError("Identificador não é um vetor: '" + name + "'");
+            return;
         }
         symbolTable[idx].used = true;
         if (!symbolTable[idx].initialized && !symbolTable[idx].isFunction) {
@@ -184,6 +189,16 @@ public:
         }
         return symbolTable[idx].type;
     }
+    bool isArraySymbol(const string &name) const {
+        int idx = lookupIndex(name);
+        if (idx < 0) {
+            return false;
+        }
+        return symbolTable[idx].isArray;
+    }
+    bool hasSymbol(const string &name) const {
+        return lookupIndex(name) >= 0;
+    }
 
     const vector<SymbolEntry> &getSymbolTable() const {
         return symbolTable;
@@ -194,28 +209,34 @@ public:
     }
 
     static string typeToStr(Types t);
-    static string modalityFor(const SymbolEntry &sym);
-
     void printTable(std::ostream& os) const {
         os << "\n==== TABELA DE SÍMBOLOS ====\n";
         os << left << setw(18) << "Nome"
            << setw(8)  << "Tipo"
-           << setw(10) << "Modal"
-           << setw(6)  << "Esc."
-           << setw(6)  << "Usado"
-           << setw(12) << "Inicializado"
+           << setw(12) << "Mutab."
+           << setw(12) << "Inicializada"
+           << setw(6)  << "Usada"
+           << setw(6)  << "Escopo"
+           << setw(6)  << "Pos."
+           << setw(10) << "Parâmetro"
+           << setw(6)  << "Vetor"
+           << setw(6)  << "Função"
            << "\n";
-        os << string(64, '-') << "\n";
+        os << string(96, '-') << "\n";
         for (auto &sym : symbolTable) {
             os << left << setw(18) << sym.name
                << setw(8)  << typeToStr(sym.type)
-               << setw(10) << modalityFor(sym)
-               << setw(6)  << sym.scope
-               << setw(6)  << (sym.used ? "sim" : "nao")
+               << setw(12) << (sym.isConstant ? "const" : "var")
                << setw(12) << (sym.initialized ? "sim" : "nao")
+               << setw(6)  << (sym.used ? "sim" : "nao")
+               << setw(6)  << sym.scope
+               << setw(6)  << sym.position
+               << setw(10) << (sym.isParameter ? "sim" : "nao")
+               << setw(6)  << (sym.isArray ? "sim" : "nao")
+               << setw(6)  << (sym.isFunction ? "sim" : "nao")
                << "\n";
         }
-        os << string(64, '-') << "\n";
+        os << string(96, '-') << "\n";
     }
 
     void printDiagnostics(std::ostream& os) const {
@@ -333,19 +354,6 @@ string SemanticTable::typeToStr(Types t) {
         case VOID: return "void";
     }
     return "?";
-}
-
-string SemanticTable::modalityFor(const SymbolEntry &sym) {
-    if (sym.isFunction) {
-        return "func";
-    }
-    if (sym.isParameter) {
-        return "param";
-    }
-    if (sym.isArray) {
-        return sym.isConstant ? "const vetor" : "vetor";
-    }
-    return sym.isConstant ? "const" : "var";
 }
 
 // expTable[Tipo1][Tipo2][Operação]

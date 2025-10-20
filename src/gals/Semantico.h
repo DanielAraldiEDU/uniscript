@@ -22,7 +22,6 @@ struct ExportedSymbol {
   bool isArray;
   bool isFunction;
   bool isConstant;
-  std::string modality;
 };
 
 struct ExportedDiagnostic {
@@ -54,11 +53,13 @@ public:
     bool isParameter;
     bool isFunction;
     bool isArray;
+    bool literalIsArray;
   };
 
   static bool isTypeParameter;
   static Variable currentVariable;
   static vector<Variable> currentParameters;
+  static std::string sourceCode;
 
   void resetCurrentVariable();
   void resetCurrentParameters();
@@ -67,6 +68,7 @@ public:
   void executeAction(int action, const Token *token);
   bool isConstant(const string &variableName);
   Type getTypeFromString(const string &typeString);
+  void setSourceCode(const std::string &code);
 };
 
 extern SemanticTable semanticTable;

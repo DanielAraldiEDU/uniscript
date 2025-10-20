@@ -20,15 +20,18 @@ namespace {
 SymbolTableView::SymbolTableView(QWidget* parent)
     : QTableWidget(parent)
 {
-    setColumnCount(7);
+    setColumnCount(10);
     setHorizontalHeaderLabels({
         QStringLiteral("Identificador"),
         QStringLiteral("Tipo"),
-        QStringLiteral("Modalidade"),
+        QStringLiteral("Mutabilidade"),
+        QStringLiteral("Inicializada"),
+        QStringLiteral("Usada"),
         QStringLiteral("Escopo"),
-        QStringLiteral("Linha decl."),
-        QStringLiteral("Inicializado"),
-        QStringLiteral("Usado")
+        QStringLiteral("Posição"),
+        QStringLiteral("Parâmetro"),
+        QStringLiteral("Vetor"),
+        QStringLiteral("Função")
     });
 
     horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -61,11 +64,14 @@ void SymbolTableView::setSymbols(const std::vector<SymbolInfo>& symbols)
 
         setItemText(0, toDisplay(symbol.identifier));
         setItemText(1, toDisplay(symbol.type));
-        setItemText(2, toDisplay(symbol.modality));
-        setItemText(3, toDisplay(symbol.scope));
-        setItemText(4, symbol.declaredLine > 0 ? QString::number(symbol.declaredLine) : QStringLiteral("-"));
-        setItemText(5, boolLabel(symbol.initialized));
-        setItemText(6, boolLabel(symbol.used));
+        setItemText(2, symbol.isConstant ? QStringLiteral("Const") : QStringLiteral("Var"));
+        setItemText(3, boolLabel(symbol.initialized));
+        setItemText(4, boolLabel(symbol.used));
+        setItemText(5, QString::number(symbol.scope));
+        setItemText(6, symbol.declaredLine > 0 ? QString::number(symbol.declaredLine) : QStringLiteral("-"));
+        setItemText(7, boolLabel(symbol.isParameter));
+        setItemText(8, boolLabel(symbol.isArray));
+        setItemText(9, boolLabel(symbol.isFunction));
     }
 }
 
