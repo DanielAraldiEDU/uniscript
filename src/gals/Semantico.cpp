@@ -21,6 +21,14 @@ static SemanticTable::Types inferLiteralType(const std::string &lex)
     return SemanticTable::BOOLEAN;
   if (!lex.empty() && lex.front() == '"' && lex.back() == '"')
     return SemanticTable::STRING;
+  if (!lex.empty())
+  {
+    const unsigned char first = static_cast<unsigned char>(lex.front());
+    if (std::isalpha(first) || first == '_')
+    {
+      return semanticTable.getSymbolType(lex);
+    }
+  }
   if (lex.empty())
     return SemanticTable::STRING;
 
@@ -140,6 +148,10 @@ namespace
       return;
     ensureForInitializerCommitted(semantico);
     const string lexema = token->getLexeme();
+    if (lexema == ")" || lexema == "(" || lexema == "]" || lexema == "[" || lexema == "{" || lexema == "}")
+    {
+      return;
+    }
     if (!lexema.empty())
     {
       const unsigned char first = static_cast<unsigned char>(lexema.front());
@@ -426,7 +438,8 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 31:
     // RETURN
-    semanticTable.maybeCloseFunction();
+    semanticTable.discardPendingExpression();
+    resetCurrentVariable();
     break;
   case 32:
     // BREAK
@@ -658,7 +671,7 @@ vector<ExportedSymbol> snapshotSymbolTable()
     symbol.isArray = entry.isArray;
     symbol.isFunction = entry.isFunction;
     symbol.isConstant = entry.isConstant;
-    symbol.modality = entry.isFunction ? "func" : (entry.isParameter ? "param" : (entry.isArray ? "vetor" : "var"));
+    symbol.modality = SemanticTable::modalityFor(entry);
     exported.push_back(symbol);
   }
 

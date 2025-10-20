@@ -49,6 +49,7 @@ public:
         symbolTable.clear();
         diagnostics.clear();
         openFunctions.clear();
+        functionScopeDepths.clear();
         pendingExpressionType = -1;
         enterScope();
     }
@@ -101,8 +102,10 @@ public:
         fun.initialized = true;
         fun.isFunction = true;
         fun.hasExplicitType = true;
+        fun.isConstant = true;
         declare(fun);
         enterScope();
+        functionScopeDepths.push_back((int)scopes.size() - 1);
         for (auto p : params) {
             SymbolEntry s;
             s.name = p.name;
@@ -140,6 +143,10 @@ public:
             }
         }
 
+        if (!functionScopeDepths.empty() && functionScopeDepths.back() == (int)scopes.size() - 1) {
+            functionScopeDepths.pop_back();
+        }
+
         scopes.pop_back();
     }
 
@@ -154,6 +161,14 @@ public:
             addError("Uso de identificador não declarado: '" + name + "'");
             return;
         }
+        if (!functionScopeDepths.empty()) {
+            int functionScopeDepth = functionScopeDepths.back();
+            const auto &sym = symbolTable[idx];
+            if (!sym.isFunction && sym.scope < functionScopeDepth) {
+                addError("Identificador não declarado neste escopo: '" + name + "'");
+                return;
+            }
+        }
         symbolTable[idx].used = true;
         if (!symbolTable[idx].initialized && !symbolTable[idx].isFunction) {
             addWarning("Possível uso sem inicialização: '" + name + "'");
@@ -162,6 +177,13 @@ public:
 
     void noteExprType(Types t) { pendingExpressionType = (int)t; }
     void discardPendingExpression() { limparTipoPendente(); }
+    Types getSymbolType(const string &name) const {
+        int idx = lookupIndex(name);
+        if (idx < 0) {
+            return INT;
+        }
+        return symbolTable[idx].type;
+    }
 
     const vector<SymbolEntry> &getSymbolTable() const {
         return symbolTable;
@@ -172,6 +194,7 @@ public:
     }
 
     static string typeToStr(Types t);
+    static string modalityFor(const SymbolEntry &sym);
 
     void printTable(std::ostream& os) const {
         os << "\n==== TABELA DE SÍMBOLOS ====\n";
@@ -186,7 +209,7 @@ public:
         for (auto &sym : symbolTable) {
             os << left << setw(18) << sym.name
                << setw(8)  << typeToStr(sym.type)
-               << setw(10) << (sym.isFunction ? "func" : (sym.isParameter ? "param" : (sym.isArray ? "vetor" : "var")))
+               << setw(10) << modalityFor(sym)
                << setw(6)  << sym.scope
                << setw(6)  << (sym.used ? "sim" : "nao")
                << setw(12) << (sym.initialized ? "sim" : "nao")
@@ -226,6 +249,7 @@ private:
     vector<SymbolEntry> symbolTable;
     vector<DiagnosticEntry> diagnostics;
     vector<string> openFunctions;
+    vector<int> functionScopeDepths;
     int pendingExpressionType = -1;
 
     void tratarNovaDeclaracao(const SymbolEntry &instrucao) {
@@ -309,6 +333,19 @@ string SemanticTable::typeToStr(Types t) {
         case VOID: return "void";
     }
     return "?";
+}
+
+string SemanticTable::modalityFor(const SymbolEntry &sym) {
+    if (sym.isFunction) {
+        return "func";
+    }
+    if (sym.isParameter) {
+        return "param";
+    }
+    if (sym.isArray) {
+        return sym.isConstant ? "const vetor" : "vetor";
+    }
+    return sym.isConstant ? "const" : "var";
 }
 
 // expTable[Tipo1][Tipo2][Operação]
