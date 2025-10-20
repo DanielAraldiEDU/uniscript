@@ -258,6 +258,12 @@ private:
         auto &simbolo = symbolTable[indiceSimbolo];
         simbolo.used = true;
 
+        const bool tentativaAtribuicao = instrucao.initialized || pendingExpressionType >= 0;
+        if (tentativaAtribuicao && simbolo.isConstant) {
+            addError("Não é permitido modificar constante: '" + instrucao.name + "'");
+            return;
+        }
+
         if (pendingExpressionType >= 0) {
             int resultado = atribType((int)simbolo.type, pendingExpressionType);
             if (resultado == ERR) {
