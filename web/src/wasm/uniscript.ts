@@ -10,10 +10,9 @@ export interface SymbolInfo {
   scope: number
   isParameter: boolean
   position: number
+  isConstant: boolean
   isArray: boolean
   isFunction: boolean
-  isConstant: boolean
-  modality: string
 }
 
 export interface DiagnosticInfo {
@@ -84,10 +83,9 @@ function normalizeSymbolInfo(raw: any): SymbolInfo {
     scope: Number.isFinite(scopeValue) ? scopeValue : -1,
     isParameter: Boolean(raw?.isParameter),
     position: Number.isFinite(positionValue) ? positionValue : -1,
-    isArray: Boolean(raw?.isArray),
-    isFunction: Boolean(raw?.isFunction),
     isConstant: Boolean(raw?.isConstant),
-    modality: typeof raw?.modality === 'string' ? raw.modality : ''
+    isArray: Boolean(raw?.isArray),
+    isFunction: Boolean(raw?.isFunction)
   }
 }
 

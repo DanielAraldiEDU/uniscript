@@ -63,7 +63,6 @@ static std::string symbolTableToJson(const std::vector<ExportedSymbol>& symbols)
     json += ",\"isArray\":" + boolToJson(sym.isArray);
     json += ",\"isFunction\":" + boolToJson(sym.isFunction);
     json += ",\"isConstant\":" + boolToJson(sym.isConstant);
-    json += ",\"modality\":\"" + jsonEscape(sym.modality) + "\"";
     json += "}";
   }
   json += "]";
@@ -127,6 +126,7 @@ char* uniscript_compile(const char* src) {
   Semantico sem;
 
   sem.resetState();
+  sem.setSourceCode(src);
   lex.setInput(src);
 
   try {

@@ -1,4 +1,4 @@
-import type { SymbolInfo } from '../wasm/uniscript'
+import type { SymbolInfo } from '../wasm/uniscript';
 
 type Props = {
   symbols: SymbolInfo[]
@@ -7,15 +7,14 @@ type Props = {
 const columns: Array<{ key: keyof SymbolInfo; label: string }> = [
   { key: 'name', label: 'Nome' },
   { key: 'type', label: 'Tipo' },
-  { key: 'modality', label: 'Modalidade' },
+  { key: 'isConstant', label: 'Mutabilidade' },
   { key: 'initialized', label: 'Inicializada' },
   { key: 'used', label: 'Usada' },
   { key: 'scope', label: 'Escopo' },
-  { key: 'isParameter', label: 'Parâmetro' },
   { key: 'position', label: 'Posição' },
+  { key: 'isParameter', label: 'Parâmetro' },
   { key: 'isArray', label: 'Vetor' },
-  { key: 'isFunction', label: 'Função' },
-  { key: 'isConstant', label: 'Mutabilidade' }
+  { key: 'isFunction', label: 'Função' }
 ]
 
 const theme = {
@@ -173,20 +172,6 @@ function renderCell(column: keyof SymbolInfo, symbol: SymbolInfo) {
         fontWeight: 500
       }}>{symbol.type}</span>
 
-    case 'modality':
-      return (
-        <span style={{
-          display: 'inline-block',
-          padding: '2px 8px',
-          background: '#6366f120',
-          color: '#818cf8',
-          borderRadius: 4,
-          fontSize: 12,
-          fontWeight: 500,
-          textTransform: 'uppercase'
-        }}>{symbol.modality ? symbol.modality.toUpperCase() : '-'}</span>
-      )
-
     case 'initialized':
     case 'used':
     case 'isParameter':
@@ -234,4 +219,4 @@ function renderCell(column: keyof SymbolInfo, symbol: SymbolInfo) {
 
 
 
-export { SymbolTable }
+export { SymbolTable };
