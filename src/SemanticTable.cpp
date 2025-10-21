@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <iomanip>
+#include <sstream>
 
 #include "gals/SemanticError.h"
 
@@ -26,6 +27,8 @@ public:
         int scope = -1;
         bool isParameter = false;
         int position = -1;
+        int line = -1;
+        int column = -1;
         bool isArray = false;
         bool isFunction = false;
         bool isConstant = false;
@@ -34,6 +37,8 @@ public:
     struct DiagnosticEntry {
         string severity;
         string message;
+        int position = -1;
+        int length = 1;
     };
 
     struct Param {
@@ -41,6 +46,8 @@ public:
         Types type;
         int position;
         bool isArray = false;
+        int line = -1;
+        int column = -1;
     };
 
     SemanticTable() { enterScope(); }
@@ -57,9 +64,9 @@ public:
 
     void declare(const SymbolEntry &e) {
         auto &cur = scopes.back();
-        
+
         if (cur.count(e.name)) {
-            addError("Identificador já declarado neste escopo: '" + e.name + "'");
+            addError("Identificador já declarado neste escopo: '" + e.name + "'", e.position, static_cast<int>(e.name.size()));
             return;
         }
 
@@ -95,7 +102,7 @@ public:
         limparTipoPendente();
     }
 
-    void beginFunction(const string& name, Types retType, const vector<Param>& params) {
+    void beginFunction(const string& name, Types retType, const vector<Param>& params, int position = -1, int line = -1, int column = -1) {
         SymbolEntry fun;
         fun.name = name;
         fun.type = retType;
@@ -103,6 +110,9 @@ public:
         fun.isFunction = true;
         fun.hasExplicitType = true;
         fun.isConstant = true;
+        fun.position = position;
+        fun.line = line;
+        fun.column = column;
         declare(fun);
         enterScope();
         functionScopeDepths.push_back((int)scopes.size() - 1);
@@ -113,6 +123,8 @@ public:
             s.initialized = true;
             s.isParameter = true;
             s.position = p.position;
+            s.line = p.line;
+            s.column = p.column;
             s.hasExplicitType = true;
             s.isArray = p.isArray;
             declare(s);
@@ -140,7 +152,7 @@ public:
         for (auto &kv : cur) {
             auto &sym = symbolTable[kv.second];
             if (!sym.used) {
-                addWarning("Identificador declarado e não usado: '" + sym.name + "' (escopo " + to_string(sym.scope) + ")");
+                addWarning("Identificador declarado e não usado: '" + sym.name + "' (escopo " + to_string(sym.scope) + ")", sym.position, static_cast<int>(sym.name.size()));
             }
         }
 
@@ -156,27 +168,27 @@ public:
         if (scopes.size() == 1) exitScope();
     }
 
-    void markUseIfDeclared(const string &name, bool requireArray = false) {
+    void markUseIfDeclared(const string &name, int position = -1, int length = 1, bool requireArray = false) {
         int idx = lookupIndex(name);
         if (idx < 0) {
-            addError("Uso de identificador não declarado: '" + name + "'");
+            addError("Uso de identificador não declarado: '" + name + "'", position, length);
             return;
         }
         if (!functionScopeDepths.empty()) {
             int functionScopeDepth = functionScopeDepths.back();
             const auto &sym = symbolTable[idx];
             if (!sym.isFunction && sym.scope < functionScopeDepth) {
-                addError("Identificador não declarado neste escopo: '" + name + "'");
+                addError("Identificador não declarado neste escopo: '" + name + "'", position, length);
                 return;
             }
         }
         if (requireArray && !symbolTable[idx].isArray) {
-            addError("Identificador não é um vetor: '" + name + "'");
+            addError("Identificador não é um vetor: '" + name + "'", position, length);
             return;
         }
         symbolTable[idx].used = true;
         if (!symbolTable[idx].initialized && !symbolTable[idx].isFunction) {
-            addWarning("Possível uso sem inicialização: '" + name + "'");
+            addWarning("Possível uso sem inicialização: '" + name + "'", position, length);
         }
     }
 
@@ -217,26 +229,32 @@ public:
            << setw(12) << "Inicializada"
            << setw(6)  << "Usada"
            << setw(6)  << "Escopo"
-           << setw(6)  << "Pos."
+           << setw(10) << "Posição"
            << setw(10) << "Parâmetro"
            << setw(6)  << "Vetor"
            << setw(6)  << "Função"
            << "\n";
-        os << string(96, '-') << "\n";
+        os << string(102, '-') << "\n";
         for (auto &sym : symbolTable) {
+            std::ostringstream pos;
+            if (sym.line >= 0) {
+                pos << sym.line << ':' << (sym.column > 0 ? sym.column : 1);
+            } else {
+                pos << '-';
+            }
             os << left << setw(18) << sym.name
                << setw(8)  << typeToStr(sym.type)
                << setw(12) << (sym.isConstant ? "const" : "var")
                << setw(12) << (sym.initialized ? "sim" : "nao")
                << setw(6)  << (sym.used ? "sim" : "nao")
                << setw(6)  << sym.scope
-               << setw(6)  << sym.position
+               << setw(10) << pos.str()
                << setw(10) << (sym.isParameter ? "sim" : "nao")
                << setw(6)  << (sym.isArray ? "sim" : "nao")
                << setw(6)  << (sym.isFunction ? "sim" : "nao")
                << "\n";
         }
-        os << string(96, '-') << "\n";
+        os << string(102, '-') << "\n";
     }
 
     void printDiagnostics(std::ostream& os) const {
@@ -275,7 +293,7 @@ private:
 
     void tratarNovaDeclaracao(const SymbolEntry &instrucao) {
         if (!instrucao.hasExplicitType) {
-            addError("Uso de identificador não declarado: '" + instrucao.name + "'");
+            addError("Uso de identificador não declarado: '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
             return;
         }
 
@@ -287,11 +305,11 @@ private:
         if (pendingExpressionType >= 0) {
             int resultado = atribType((int)symbolTable[novoIndice].type, pendingExpressionType);
             if (resultado == ERR) {
-                addError("Tipos incompatíveis na inicialização de '" + instrucao.name + "'");
+                addError("Tipos incompatíveis na inicialização de '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
             } else {
                 symbolTable[novoIndice].initialized = true;
                 if (resultado == WAR) {
-                    addWarning("Conversão implícita na inicialização de '" + instrucao.name + "'");
+                    addWarning("Conversão implícita na inicialização de '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
                 }
             }
         } else if (instrucao.initialized) {
@@ -305,24 +323,24 @@ private:
 
         const bool tentativaAtribuicao = instrucao.initialized || pendingExpressionType >= 0;
         if (tentativaAtribuicao && simbolo.isConstant) {
-            addError("Não é permitido modificar constante: '" + instrucao.name + "'");
+            addError("Não é permitido modificar constante: '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
             return;
         }
 
         if (pendingExpressionType >= 0) {
             int resultado = atribType((int)simbolo.type, pendingExpressionType);
             if (resultado == ERR) {
-                addError("Tipos incompatíveis na atribuição para '" + instrucao.name + "'");
+                addError("Tipos incompatíveis na atribuição para '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
             } else {
                 simbolo.initialized = true;
                 if (resultado == WAR) {
-                    addWarning("Possível perda de precisão na atribuição para '" + instrucao.name + "'");
+                    addWarning("Possível perda de precisão na atribuição para '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
                 }
             }
         } else if (instrucao.initialized) {
             simbolo.initialized = true;
         } else if (!simbolo.initialized && !simbolo.isFunction) {
-            addWarning("Possível uso sem inicialização: '" + instrucao.name + "'");
+            addWarning("Possível uso sem inicialização: '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
         }
     }
 
@@ -338,11 +356,13 @@ private:
         return -1;
     }
 
-    void addError(const string& message){
-        diagnostics.push_back({"error", message});
-        throw SemanticError(message);
+    void addError(const string& message, int position = -1, int length = 1){
+        diagnostics.push_back({"error", message, position, length});
+        throw SemanticError(message, position, length);
     }
-    void addWarning(const string& message){ diagnostics.push_back({"warning", message}); }
+    void addWarning(const string& message, int position = -1, int length = 1){
+        diagnostics.push_back({"warning", message, position, length});
+    }
 };
 
 string SemanticTable::typeToStr(Types t) {

@@ -1,12 +1,12 @@
 import type * as MonacoNS from 'monaco-editor'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { Console as ConsoleComponent, type LogItem } from './components/Console'
 import { Editor } from './components/Editor'
 import { HeaderBar } from './components/HeaderBar'
 import { StatusBar } from './components/StatusBar'
 import { SymbolTable } from './components/SymbolTable'
 import { theme } from './theme'
-import { compileSource, posToLineCol, type CompileKind, type SymbolInfo } from './wasm/uniscript'
+import { compileSource, posToLineCol, type CompileKind, type SymbolInfo, type DiagnosticInfo, type CompileResult } from './wasm/uniscript'
 
 export default function App() {
   const [code, setCode] = useState<string>('print("Hello, World!");')
@@ -51,13 +51,29 @@ export default function App() {
       diagnostics.forEach((diag) => {
         const color = diag.severity === 'error' ? theme.red : diag.severity === 'warning' ? theme.yellow : theme.subtle
         const prefix = diag.severity === 'error' ? '[ERRO]' : diag.severity === 'warning' ? '[AVISO]' : '[INFO]'
-        addLog(`${prefix} ${diag.message}`, color)
+        const loc = diag.position >= 0 ? (() => {
+          const { line, col } = posToLineCol(code, diag.position)
+          return ` (linha ${line}, coluna ${col})`
+        })() : ''
+        addLog(`${prefix} ${diag.message}${loc}`, color)
       })
+
+      applyMarkers(code, diagnostics, result, monacoRef, modelRef)
 
       const hasDiagnosticErrors = diagnostics.some((diag) => diag.severity === 'error')
       const hasWarnings = diagnostics.some((diag) => diag.severity === 'warning')
 
-      if (result.ok && !hasDiagnosticErrors) {
+      if (!result.ok) {
+        if (!hasDiagnosticErrors) {
+          const pos = result.pos ?? -1
+          const { line, col } = posToLineCol(code, pos)
+          const msg = summaryMessage(result.kind, result.message, line, col)
+          addLog(msg, theme.red)
+        }
+        return
+      }
+
+      if (!hasDiagnosticErrors) {
         if (hasWarnings) {
           addLog('Analise concluida com avisos.', theme.yellow)
         } else {
@@ -66,15 +82,7 @@ export default function App() {
         return
       }
 
-      if (result.ok && hasDiagnosticErrors) {
-        addLog('ERROR: Foram encontrados erros semanticos. Reveja os avisos acima.', theme.red)
-        return
-      }
-
-      const pos = result.pos ?? -1
-      const { line, col } = posToLineCol(code, pos)
-      const msg = summaryMessage(result.kind, result.message, line, col)
-      addLog(msg, theme.red)
+      addLog('ERROR: Foram encontrados erros semanticos. Reveja os avisos acima.', theme.red)
     } catch (e: any) {
       setSymbols([])
       addLog(`Erro desconhecido durante a compilacao. ${String(e?.message ?? e)}`, theme.red)
@@ -122,6 +130,58 @@ export default function App() {
       <StatusBar line={cursor.line} col={cursor.col} />
     </div>
   )
+}
+
+function rangeFromOffset(code: string, pos: number, length: number) {
+  if (pos < 0) return null
+  const safeLength = Math.max(1, length)
+  const start = posToLineCol(code, pos)
+  const end = posToLineCol(code, pos + safeLength)
+  return {
+    startLineNumber: start.line,
+    startColumn: start.col,
+    endLineNumber: end.line,
+    endColumn: end.col
+  }
+}
+
+function applyMarkers(code: string, diagnostics: DiagnosticInfo[], result: CompileResult, monacoRef: MutableRefObject<typeof MonacoNS | null>, modelRef: MutableRefObject<MonacoNS.editor.ITextModel | null>) {
+  const monaco = monacoRef.current
+  const model = modelRef.current
+  if (!monaco || !model) return
+
+  const markers: MonacoNS.editor.IMarkerData[] = []
+
+  diagnostics.forEach((diag) => {
+    if (diag.position < 0) return
+    const range = rangeFromOffset(code, diag.position, diag.length)
+    if (!range) return
+    markers.push({
+      severity: diag.severity === 'error' ? monaco.MarkerSeverity.Error
+        : diag.severity === 'warning' ? monaco.MarkerSeverity.Warning
+        : monaco.MarkerSeverity.Info,
+      message: diag.message,
+      source: 'uniscript',
+      ...range
+    })
+  })
+
+  if (!result.ok && result.pos !== undefined && result.pos !== null && result.pos >= 0) {
+    const hasPrimaryMarker = diagnostics.some((diag) => diag.severity === 'error' && diag.position === result.pos)
+    if (!hasPrimaryMarker) {
+      const range = rangeFromOffset(code, result.pos, result.length ?? 1)
+      if (range) {
+        markers.push({
+          severity: monaco.MarkerSeverity.Error,
+          message: result.message ?? 'Erro',
+          source: 'uniscript',
+          ...range
+        })
+      }
+    }
+  }
+
+  monaco.editor.setModelMarkers(model, 'uniscript', markers)
 }
 
 function Console({ logs }: { logs: LogItem[] }) {

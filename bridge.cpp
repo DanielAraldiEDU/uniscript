@@ -60,6 +60,8 @@ static std::string symbolTableToJson(const std::vector<ExportedSymbol>& symbols)
     json += ",\"scope\":" + std::to_string(sym.scope);
     json += ",\"isParameter\":" + boolToJson(sym.isParameter);
     json += ",\"position\":" + std::to_string(sym.position);
+    json += ",\"line\":" + std::to_string(sym.line);
+    json += ",\"column\":" + std::to_string(sym.column);
     json += ",\"isArray\":" + boolToJson(sym.isArray);
     json += ",\"isFunction\":" + boolToJson(sym.isFunction);
     json += ",\"isConstant\":" + boolToJson(sym.isConstant);
@@ -75,7 +77,7 @@ static std::string diagnosticsToJson(const std::vector<ExportedDiagnostic>& diag
   for (const auto& d : diagnostics) {
     if (!first) json += ",";
     first = false;
-    json += "{\"severity\":\"" + jsonEscape(d.severity) + "\",\"message\":\"" + jsonEscape(d.message) + "\"}";
+    json += "{\"severity\":\"" + jsonEscape(d.severity) + "\",\"message\":\"" + jsonEscape(d.message) + "\",\"position\":" + std::to_string(d.position) + ",\"length\":" + std::to_string(d.length) + "}";
   }
   json += "]";
   return json;
@@ -90,7 +92,7 @@ static std::string successResponse(const std::vector<ExportedSymbol>& symbols,
   return json;
 }
 
-static std::string errorResponse(const char* kind, const char* message, int pos) {
+static std::string errorResponse(const char* kind, const char* message, int pos, int length) {
   std::string json = "{\"ok\":false";
   if (kind) {
     json += ",\"kind\":\"";
@@ -103,8 +105,13 @@ static std::string errorResponse(const char* kind, const char* message, int pos)
     json += "\"";
   }
   json += ",\"pos\":" + std::to_string(pos);
+  json += ",\"length\":" + std::to_string(length <= 0 ? 1 : length);
   json += ",\"symbolTable\":[]";
-  json += ",\"diagnostics\":[]";
+  json += ",\"diagnostics\":[";
+  if (message) {
+    json += "{\"severity\":\"error\",\"message\":\"" + jsonEscape(message) + "\",\"position\":" + std::to_string(pos) + ",\"length\":" + std::to_string(length <= 0 ? 1 : length) + "}";
+  }
+  json += "]";
   json += "}";
   return json;
 }
@@ -139,16 +146,16 @@ char* uniscript_compile(const char* src) {
     return duplicateString(json);
   } catch (const LexicalError& e) {
     sem.resetState();
-    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition()));
+    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (const SyntacticError& e) {
     sem.resetState();
-    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition()));
+    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (const SemanticError& e) {
     sem.resetState();
-    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition()));
+    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (...) {
     sem.resetState();
-    return duplicateString(errorResponse("unknown", "unknown error", -1));
+    return duplicateString(errorResponse("unknown", "unknown error", -1, 1));
   }
 }
 

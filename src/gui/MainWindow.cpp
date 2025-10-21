@@ -134,6 +134,7 @@ void MainWindow::compileSource() {
 
   std::string srcStd = source.toStdString();
   lex.setInput(srcStd.c_str());
+  sem.setSourceCode(srcStd);
 
   auto updateTable = [&]() {
     tableView->setSymbols(sem.symbolTable());

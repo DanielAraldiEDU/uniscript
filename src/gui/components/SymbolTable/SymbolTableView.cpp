@@ -68,7 +68,11 @@ void SymbolTableView::setSymbols(const std::vector<SymbolInfo>& symbols)
         setItemText(3, boolLabel(symbol.initialized));
         setItemText(4, boolLabel(symbol.used));
         setItemText(5, QString::number(symbol.scope));
-        setItemText(6, symbol.declaredLine > 0 ? QString::number(symbol.declaredLine) : QStringLiteral("-"));
+        if (symbol.line > 0) {
+            setItemText(6, QStringLiteral("%1:%2").arg(symbol.line).arg(symbol.column > 0 ? symbol.column : 1));
+        } else {
+            setItemText(6, QStringLiteral("-"));
+        }
         setItemText(7, boolLabel(symbol.isParameter));
         setItemText(8, boolLabel(symbol.isArray));
         setItemText(9, boolLabel(symbol.isFunction));

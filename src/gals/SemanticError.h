@@ -9,8 +9,8 @@ class SemanticError : public AnalysisError
 {
 public:
 
-    SemanticError(const std::string &msg, int position = -1)
-      : AnalysisError(msg, position) { }
+    SemanticError(const std::string &msg, int position = -1, int length = 1)
+      : AnalysisError(msg, position, length) { }
 };
 
 #endif

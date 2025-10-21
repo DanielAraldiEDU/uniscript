@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cctype>
+#include <utility>
 
 #include "Semantico.h"
 #include "Constants.h"
@@ -12,7 +13,7 @@ using namespace std;
 SemanticTable semanticTable;
 
 bool Semantico::isTypeParameter = false;
-Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false, false};
+Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, -1, -1, -1};
 vector<Semantico::Variable> Semantico::currentParameters = {};
 std::string Semantico::sourceCode = "";
 
@@ -183,6 +184,29 @@ namespace
     return false;
   }
 
+  std::pair<int, int> offsetToLineCol(int pos)
+  {
+    if (pos < 0)
+      return {-1, -1};
+    int line = 1;
+    int column = 1;
+    const std::string &src = Semantico::sourceCode;
+    const int limit = static_cast<int>(src.size());
+    for (int i = 0; i < pos && i < limit; ++i)
+    {
+      if (src[i] == '\n')
+      {
+        ++line;
+        column = 1;
+      }
+      else
+      {
+        ++column;
+      }
+    }
+    return {line, column};
+  }
+
   void resetScopeState()
   {
     activeScopes.clear();
@@ -272,10 +296,12 @@ namespace
       if (isIdentifier && lexema != "true" && lexema != "false")
       {
         const bool requiresArray = hasIndexingAfter(token);
-        semanticTable.markUseIfDeclared(lexema, requiresArray);
+        semanticTable.markUseIfDeclared(lexema, token ? token->getPosition() : -1, token ? static_cast<int>(token->getLexeme().size()) : 1, requiresArray);
       }
     }
     Semantico::currentVariable.value.push_back(lexema);
+    Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
+    Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
     Semantico::currentVariable.isInitialized = true;
     const auto literalType = inferLiteralType(lexema);
     if (!arrayLiteralStates.empty())
@@ -383,8 +409,10 @@ namespace
         {
           tipoParametro = static_cast<SemanticTable::Types>(parametro.type);
         }
-        SemanticTable::Param info{parametro.name, tipoParametro, static_cast<int>(i)};
+        SemanticTable::Param info{parametro.name, tipoParametro, parametro.position};
         info.isArray = parametro.isArray;
+        info.line = parametro.line;
+        info.column = parametro.column;
         parametros.push_back(info);
       }
       SemanticTable::Types retorno = SemanticTable::INT;
@@ -392,7 +420,7 @@ namespace
       {
         retorno = static_cast<SemanticTable::Types>(Semantico::currentVariable.type);
       }
-      semanticTable.beginFunction(Semantico::currentVariable.name, retorno, parametros);
+      semanticTable.beginFunction(Semantico::currentVariable.name, retorno, parametros, Semantico::currentVariable.position, Semantico::currentVariable.line, Semantico::currentVariable.column);
       semantico.resetCurrentParameters();
       semantico.resetCurrentVariable();
     }
@@ -406,7 +434,9 @@ namespace
 
     if (Semantico::currentVariable.isFunction)
     {
-      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, -1, false, false, true, false, false, false, false});
+      const int position = token ? token->getPosition() : -1;
+      const auto [line, column] = offsetToLineCol(position);
+      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, true, false, false, false, false, position, line, column});
       Semantico::isTypeParameter = true;
     }
     else
@@ -416,6 +446,10 @@ namespace
       Semantico::currentVariable.isArray = semanticTable.isArraySymbol(nome);
       Semantico::currentVariable.literalIsArray = false;
       Semantico::currentVariable.type = Semantico::Type::NULLABLE;
+      Semantico::currentVariable.position = token ? token->getPosition() : -1;
+      const auto [line, column] = offsetToLineCol(Semantico::currentVariable.position);
+      Semantico::currentVariable.line = line;
+      Semantico::currentVariable.column = column;
     }
   }
 
@@ -425,7 +459,11 @@ namespace
     if (!(cin >> valor))
       return;
     Semantico::currentVariable.value.clear();
+    Semantico::currentVariable.valuePositions.clear();
+    Semantico::currentVariable.valueLengths.clear();
     Semantico::currentVariable.value.push_back(valor);
+    Semantico::currentVariable.valuePositions.push_back(-1);
+    Semantico::currentVariable.valueLengths.push_back(static_cast<int>(valor.size()));
     semanticTable.noteExprType(SemanticTable::INT);
   }
 
@@ -440,7 +478,9 @@ namespace
     entrada.used = Semantico::currentVariable.isUsed;
     entrada.scope = -1;
     entrada.isParameter = Semantico::currentVariable.isParameter;
-    entrada.position = -1;
+    entrada.position = Semantico::currentVariable.position;
+    entrada.line = Semantico::currentVariable.line;
+    entrada.column = Semantico::currentVariable.column;
     entrada.isArray = Semantico::currentVariable.isArray;
     entrada.isFunction = false;
     entrada.isConstant = Semantico::currentVariable.isConstant;
@@ -448,7 +488,7 @@ namespace
 
     if (Semantico::currentVariable.literalIsArray && !Semantico::currentVariable.isArray)
     {
-      throw SemanticError("Variável não declarada como vetor: '" + entrada.name + "'");
+      throw SemanticError("Variável não declarada como vetor: '" + entrada.name + "'", Semantico::currentVariable.position, static_cast<int>(Semantico::currentVariable.name.size()));
     }
 
     semanticTable.commitStatement(entrada);
@@ -458,7 +498,7 @@ namespace
 
 void Semantico::resetCurrentVariable()
 {
-  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, -1, false, false, false, false, false, false, false};
+  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, -1, -1, -1};
   Semantico::isTypeParameter = false;
 }
 
@@ -554,8 +594,9 @@ void Semantico::executeAction(int action, const Token *token)
       if (Semantico::currentVariable.name.empty())
       {
         Semantico::currentVariable.name = lexema;
+        Semantico::currentVariable.position = token->getPosition();
       }
-      semanticTable.markUseIfDeclared(lexema);
+      semanticTable.markUseIfDeclared(lexema, token->getPosition(), static_cast<int>(token->getLexeme().size()));
     }
     Semantico::currentVariable.isUsed = true;
     break;
@@ -572,10 +613,12 @@ void Semantico::executeAction(int action, const Token *token)
         auto *headerState = currentForHeaderState();
         if (!(headerState && headerState->phase == ForHeaderPhase::Init && Semantico::currentVariable.value.empty()))
         {
-          semanticTable.markUseIfDeclared(lexema, true);
+          semanticTable.markUseIfDeclared(lexema, token ? token->getPosition() : -1, token ? static_cast<int>(token->getLexeme().size()) : 1, true);
         }
       }
       Semantico::currentVariable.value.push_back(lexema);
+      Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
+      Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
     }
     break;
   case 16:
@@ -583,13 +626,16 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 17:
     // PRINT
-    for (const auto &value : Semantico::currentVariable.value)
+    for (size_t idx = 0; idx < Semantico::currentVariable.value.size(); ++idx)
     {
+      const auto &value = Semantico::currentVariable.value[idx];
+      const int valuePos = idx < Semantico::currentVariable.valuePositions.size() ? Semantico::currentVariable.valuePositions[idx] : -1;
+      const int valueLen = idx < Semantico::currentVariable.valueLengths.size() ? Semantico::currentVariable.valueLengths[idx] : static_cast<int>(value.size());
       if (!value.empty() && (std::isalpha(static_cast<unsigned char>(value.front())) || value.front() == '_'))
       {
         if (value != "true" && value != "false")
         {
-          semanticTable.markUseIfDeclared(value);
+          semanticTable.markUseIfDeclared(value, valuePos, valueLen);
         }
       }
       cout << value << " ";
@@ -617,11 +663,23 @@ void Semantico::executeAction(int action, const Token *token)
   case 23:
     // FUNCTION DECLARATION
     Semantico::currentVariable.name = token->getLexeme();
+    Semantico::currentVariable.position = token ? token->getPosition() : -1;
+    {
+      const auto [line, column] = offsetToLineCol(Semantico::currentVariable.position);
+      Semantico::currentVariable.line = line;
+      Semantico::currentVariable.column = column;
+    }
     break;
   case 24:
     // VALUE INCREMENT/DECREMENT
     Semantico::currentVariable.name = token->getLexeme();
-    semanticTable.markUseIfDeclared(Semantico::currentVariable.name);
+    Semantico::currentVariable.position = token ? token->getPosition() : -1;
+    {
+      const auto [line, column] = offsetToLineCol(Semantico::currentVariable.position);
+      Semantico::currentVariable.line = line;
+      Semantico::currentVariable.column = column;
+    }
+    semanticTable.markUseIfDeclared(Semantico::currentVariable.name, token ? token->getPosition() : -1, token ? static_cast<int>(token->getLexeme().size()) : 1);
     break;
   case 25:
     // CONST/VAR
@@ -711,6 +769,8 @@ void Semantico::executeAction(int action, const Token *token)
       {
         const std::string lexema = token->getLexeme();
         Semantico::currentVariable.value.push_back(lexema);
+        Semantico::currentVariable.valuePositions.push_back(token->getPosition());
+        Semantico::currentVariable.valueLengths.push_back(static_cast<int>(token->getLexeme().size()));
         Semantico::currentVariable.isInitialized = true;
         semanticTable.noteExprType(inferLiteralType(lexema));
       }
@@ -861,6 +921,47 @@ void Semantico::printVariable(const Variable &variable)
   cout << "Vetor: " << (variable.isArray ? "sim" : "não") << endl;
 }
 
+std::vector<SymbolInfo> Semantico::symbolTable() const
+{
+  std::vector<SymbolInfo> result;
+  const auto &entries = semanticTable.getSymbolTable();
+  result.reserve(entries.size());
+
+  for (const auto &entry : entries)
+  {
+    SymbolInfo info;
+    info.identifier = entry.name;
+    info.type = SemanticTable::typeToStr(entry.type);
+    info.isConstant = entry.isConstant;
+    info.initialized = entry.initialized;
+    info.used = entry.used;
+    info.scope = entry.scope;
+    info.line = entry.line;
+    info.column = entry.column;
+    if ((info.line < 0 || info.column < 0) && entry.position >= 0)
+    {
+      const auto [line, column] = offsetToLineCol(entry.position);
+      info.line = line;
+      info.column = column;
+    }
+    info.isParameter = entry.isParameter;
+    info.isArray = entry.isArray;
+    info.isFunction = entry.isFunction;
+    result.push_back(info);
+  }
+
+  return result;
+}
+
+void Semantico::clearSymbolTable()
+{
+  semanticTable.reset();
+  resetScopeState();
+  resetCurrentVariable();
+  resetCurrentParameters();
+  sourceCode.clear();
+}
+
 vector<ExportedSymbol> snapshotSymbolTable()
 {
   vector<ExportedSymbol> exported;
@@ -877,6 +978,14 @@ vector<ExportedSymbol> snapshotSymbolTable()
     symbol.scope = entry.scope;
     symbol.isParameter = entry.isParameter;
     symbol.position = entry.position;
+    symbol.line = entry.line;
+    symbol.column = entry.column;
+    if (symbol.position >= 0 && (entry.line < 0 || entry.column < 0))
+    {
+      const auto [line, column] = offsetToLineCol(symbol.position);
+      symbol.line = line;
+      symbol.column = column;
+    }
     symbol.isArray = entry.isArray;
     symbol.isFunction = entry.isFunction;
     symbol.isConstant = entry.isConstant;
@@ -894,7 +1003,7 @@ vector<ExportedDiagnostic> snapshotDiagnostics()
 
   for (const auto &diag : items)
   {
-    exported.push_back({diag.severity, diag.message});
+    exported.push_back({diag.severity, diag.message, diag.position, diag.length});
   }
 
   return exported;

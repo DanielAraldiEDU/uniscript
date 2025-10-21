@@ -11,7 +11,7 @@ const columns: Array<{ key: keyof SymbolInfo; label: string }> = [
   { key: 'initialized', label: 'Inicializada' },
   { key: 'used', label: 'Usada' },
   { key: 'scope', label: 'Escopo' },
-  { key: 'position', label: 'Posição' },
+  { key: 'line', label: 'Posição' },
   { key: 'isParameter', label: 'Parâmetro' },
   { key: 'isArray', label: 'Vetor' },
   { key: 'isFunction', label: 'Função' }
@@ -209,8 +209,15 @@ function renderCell(column: keyof SymbolInfo, symbol: SymbolInfo) {
     case 'scope':
       return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.scope >= 0 ? symbol.scope : '-'}</span>
 
+    case 'line':
+      return symbol.line > 0 ? (
+        <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.line}:{symbol.column > 0 ? symbol.column : 1}</span>
+      ) : (
+        <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>-</span>
+      )
+    case 'column':
     case 'position':
-      return <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{symbol.position >= 0 ? symbol.position : '-'}</span>
+      return symbol[column] ?? '-'
 
     default:
       return symbol[column] ?? '-'

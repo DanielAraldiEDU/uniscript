@@ -6,6 +6,7 @@
 
 #include "Token.h"
 #include "SemanticError.h"
+#include "SymbolInfo.h"
 
 using namespace std;
 
@@ -19,6 +20,8 @@ struct ExportedSymbol {
   int scope;
   bool isParameter;
   int position;
+  int line;
+  int column;
   bool isArray;
   bool isFunction;
   bool isConstant;
@@ -27,6 +30,8 @@ struct ExportedSymbol {
 struct ExportedDiagnostic {
   std::string severity;
   std::string message;
+  int position;
+  int length;
 };
 
 class Semantico
@@ -46,6 +51,8 @@ public:
     string name;
     Type type;
     vector<string> value;
+    vector<int> valuePositions;
+    vector<int> valueLengths;
     int scope;
     bool isInitialized;
     bool isUsed;
@@ -54,6 +61,9 @@ public:
     bool isFunction;
     bool isArray;
     bool literalIsArray;
+    int position;
+    int line;
+    int column;
   };
 
   static bool isTypeParameter;
@@ -69,6 +79,8 @@ public:
   bool isConstant(const string &variableName);
   Type getTypeFromString(const string &typeString);
   void setSourceCode(const std::string &code);
+  std::vector<SymbolInfo> symbolTable() const;
+  void clearSymbolTable();
 };
 
 extern SemanticTable semanticTable;
