@@ -3,12 +3,15 @@
 #include <vector>
 #include <cctype>
 #include <utility>
+#include <optional>
 
 #include "Semantico.h"
 #include "Constants.h"
 #include "../SemanticTable.cpp"
 
 using namespace std;
+
+#define SEMANTIC_DEBUG 0
 
 SemanticTable semanticTable;
 
@@ -103,6 +106,256 @@ namespace
     bool hasElementType = false;
   };
   static vector<ArrayLiteralState> arrayLiteralStates;
+
+  enum class OperatorKind
+  {
+    LogicalOr,
+    LogicalAnd,
+    BitwiseOr,
+    BitwiseAnd,
+    BitwiseXor,
+    ShiftLeft,
+    ShiftRight,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Power,
+    RelationalCompare,
+    RelationalEquality
+  };
+
+  enum class UnaryKind
+  {
+    LogicalNot,
+    ArithmeticNeg,
+    BitwiseNot
+  };
+
+  struct PendingOperator
+  {
+    OperatorKind kind = OperatorKind::Add;
+    int position = -1;
+    int length = 1;
+    std::string lexeme;
+  };
+
+  struct PendingUnary
+  {
+    UnaryKind kind = UnaryKind::LogicalNot;
+    int position = -1;
+    int length = 1;
+    std::string lexeme;
+  };
+
+  struct ExpressionContext
+  {
+    bool hasAccumulated = false;
+    SemanticTable::Types accumulatedType = SemanticTable::INT;
+    std::optional<PendingOperator> pendingOperator;
+    std::vector<PendingUnary> pendingUnary;
+  };
+
+  static std::vector<ExpressionContext> expressionStack;
+
+  ExpressionContext &ensureExpressionContext()
+  {
+    if (expressionStack.empty())
+    {
+      expressionStack.push_back({});
+    }
+    return expressionStack.back();
+  }
+
+  void resetExpressionContexts()
+  {
+    expressionStack.clear();
+  }
+
+  void pushExpressionContext()
+  {
+    expressionStack.push_back({});
+  }
+
+  std::string typeName(SemanticTable::Types type)
+  {
+    return SemanticTable::typeToStr(type);
+  }
+
+  bool isNumeric(SemanticTable::Types type)
+  {
+    return type == SemanticTable::INT || type == SemanticTable::FLOAT;
+  }
+
+  bool isBoolConvertible(SemanticTable::Types type)
+  {
+    return type == SemanticTable::BOOLEAN ||
+           type == SemanticTable::INT ||
+           type == SemanticTable::FLOAT ||
+           type == SemanticTable::STRING;
+  }
+
+  SemanticTable::Types applyUnaryOperation(const PendingUnary &unary, SemanticTable::Types operandType)
+  {
+    switch (unary.kind)
+    {
+    case UnaryKind::LogicalNot:
+      if (!isBoolConvertible(operandType))
+      {
+        throw SemanticError("Operador '" + unary.lexeme + "' requer valor convertível para booleano, encontrado '" + typeName(operandType) + "'", unary.position, unary.length);
+      }
+      return SemanticTable::BOOLEAN;
+    case UnaryKind::BitwiseNot:
+      if (operandType != SemanticTable::INT)
+      {
+        throw SemanticError("Operador '" + unary.lexeme + "' requer operando inteiro, encontrado '" + typeName(operandType) + "'", unary.position, unary.length);
+      }
+      return SemanticTable::INT;
+    case UnaryKind::ArithmeticNeg:
+      if (!isNumeric(operandType))
+      {
+        throw SemanticError("Operador '" + unary.lexeme + "' requer operando numérico, encontrado '" + typeName(operandType) + "'", unary.position, unary.length);
+      }
+      return operandType;
+    }
+    return operandType;
+  }
+
+  void applyPendingUnary(ExpressionContext &ctx, SemanticTable::Types &operandType)
+  {
+    if (ctx.pendingUnary.empty())
+    {
+      return;
+    }
+    for (auto it = ctx.pendingUnary.rbegin(); it != ctx.pendingUnary.rend(); ++it)
+    {
+      operandType = applyUnaryOperation(*it, operandType);
+    }
+    ctx.pendingUnary.clear();
+  }
+
+  SemanticTable::Types evalArithmeticOperation(SemanticTable::Operations op, SemanticTable::Types lhs, SemanticTable::Types rhs, const PendingOperator &info)
+  {
+    int lhsIdx = static_cast<int>(lhs);
+    int rhsIdx = static_cast<int>(rhs);
+    int opIdx = static_cast<int>(op);
+    int result = SemanticTable::resultType(lhsIdx, rhsIdx, opIdx);
+    if (result == SemanticTable::ERR)
+    {
+      throw SemanticError("Tipos incompatíveis para operador '" + info.lexeme + "': '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", info.position, info.length);
+    }
+    return static_cast<SemanticTable::Types>(result);
+  }
+
+  SemanticTable::Types evaluateBinaryOperation(const PendingOperator &op, SemanticTable::Types lhs, SemanticTable::Types rhs)
+  {
+    switch (op.kind)
+    {
+    case OperatorKind::LogicalOr:
+    case OperatorKind::LogicalAnd:
+      if (!isBoolConvertible(lhs) || !isBoolConvertible(rhs))
+      {
+        throw SemanticError("Operador '" + op.lexeme + "' requer valores convertíveis para booleano, encontrados '" +
+                                typeName(lhs) + "' e '" + typeName(rhs) + "'",
+                            op.position, op.length);
+      }
+      return SemanticTable::BOOLEAN;
+    case OperatorKind::BitwiseOr:
+    case OperatorKind::BitwiseAnd:
+    case OperatorKind::BitwiseXor:
+    case OperatorKind::ShiftLeft:
+    case OperatorKind::ShiftRight:
+      if (lhs != SemanticTable::INT || rhs != SemanticTable::INT)
+      {
+        throw SemanticError("Operador '" + op.lexeme + "' requer operandos inteiros, encontrados '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", op.position, op.length);
+      }
+      return SemanticTable::INT;
+    case OperatorKind::Add:
+      return evalArithmeticOperation(SemanticTable::SUM, lhs, rhs, op);
+    case OperatorKind::Subtract:
+      return evalArithmeticOperation(SemanticTable::SUB, lhs, rhs, op);
+    case OperatorKind::Multiply:
+      return evalArithmeticOperation(SemanticTable::MUL, lhs, rhs, op);
+    case OperatorKind::Divide:
+      return evalArithmeticOperation(SemanticTable::DIV, lhs, rhs, op);
+    case OperatorKind::Modulo:
+      if (lhs != SemanticTable::INT || rhs != SemanticTable::INT)
+      {
+        throw SemanticError("Operador '" + op.lexeme + "' requer operandos inteiros, encontrados '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", op.position, op.length);
+      }
+      return evalArithmeticOperation(SemanticTable::MOD, lhs, rhs, op);
+    case OperatorKind::Power:
+      if (!isNumeric(lhs) || !isNumeric(rhs))
+      {
+        throw SemanticError("Operador '" + op.lexeme + "' requer operandos numéricos, encontrados '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", op.position, op.length);
+      }
+      return evalArithmeticOperation(SemanticTable::POT, lhs, rhs, op);
+    case OperatorKind::RelationalCompare:
+      if (!isNumeric(lhs) || !isNumeric(rhs))
+      {
+        throw SemanticError("Operador '" + op.lexeme + "' requer operandos numéricos, encontrados '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", op.position, op.length);
+      }
+      return SemanticTable::BOOLEAN;
+    case OperatorKind::RelationalEquality:
+      if (lhs == rhs)
+      {
+        return SemanticTable::BOOLEAN;
+      }
+      if (isNumeric(lhs) && isNumeric(rhs))
+      {
+        return SemanticTable::BOOLEAN;
+      }
+      throw SemanticError("Operador '" + op.lexeme + "' requer operandos comparáveis, encontrados '" + typeName(lhs) + "' e '" + typeName(rhs) + "'", op.position, op.length);
+    }
+    return lhs;
+  }
+
+  void registerExpressionOperand(SemanticTable::Types operandType, const Token *token)
+  {
+    (void)token;
+    auto &ctx = ensureExpressionContext();
+    applyPendingUnary(ctx, operandType);
+    if (ctx.hasAccumulated)
+    {
+      if (ctx.pendingOperator.has_value())
+      {
+        operandType = evaluateBinaryOperation(*ctx.pendingOperator, ctx.accumulatedType, operandType);
+        ctx.pendingOperator.reset();
+      }
+    }
+    else
+    {
+      ctx.hasAccumulated = true;
+    }
+    ctx.accumulatedType = operandType;
+    semanticTable.noteExprType(ctx.accumulatedType);
+#if SEMANTIC_DEBUG
+    std::cerr << "    [expr] operand=" << typeName(operandType) << " accumulated=" << typeName(ctx.accumulatedType) << std::endl;
+#endif
+  }
+
+  void registerBinaryOperator(OperatorKind kind, const Token *token)
+  {
+    auto &ctx = ensureExpressionContext();
+    PendingOperator op;
+    op.kind = kind;
+    op.position = token ? token->getPosition() : -1;
+    op.length = token ? static_cast<int>(token->getLexeme().size()) : 1;
+    op.lexeme = token ? token->getLexeme() : "";
+    ctx.pendingOperator = op;
+  }
+
+  void registerUnaryOperator(UnaryKind kind, const Token *token)
+  {
+    auto &ctx = ensureExpressionContext();
+    PendingUnary unary;
+    unary.kind = kind;
+    unary.position = token ? token->getPosition() : -1;
+    unary.length = token ? static_cast<int>(token->getLexeme().size()) : 1;
+    unary.lexeme = token ? token->getLexeme() : "";
+    ctx.pendingUnary.push_back(unary);
+  }
 
   bool hasOpeningBracketBefore(const Token *token)
   {
@@ -339,10 +592,7 @@ namespace
         }
       }
     }
-    else
-    {
-      semanticTable.noteExprType(literalType);
-    }
+    registerExpressionOperand(literalType, token);
 
     const bool endsArray = closesArrayAfter(token);
     if (endsArray && !arrayLiteralStates.empty())
@@ -500,6 +750,7 @@ void Semantico::resetCurrentVariable()
 {
   Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, -1, -1, -1};
   Semantico::isTypeParameter = false;
+  resetExpressionContexts();
 }
 
 void Semantico::resetCurrentParameters()
@@ -545,6 +796,18 @@ Semantico::Type Semantico::getTypeFromString(const string &typeString)
 
 void Semantico::executeAction(int action, const Token *token)
 {
+#if SEMANTIC_DEBUG
+  std::cerr << "[SEM] action=" << action;
+  if (token)
+  {
+    std::cerr << " token='" << token->getLexeme() << "' pos=" << token->getPosition();
+  }
+  else
+  {
+    std::cerr << " token=<null>";
+  }
+  std::cerr << std::endl;
+#endif
   switch (action)
   {
   case 1:
@@ -552,15 +815,101 @@ void Semantico::executeAction(int action, const Token *token)
     registrarLiteral(*this, token);
     break;
   case 2:  // OR
+    registerBinaryOperator(OperatorKind::LogicalOr, token);
+    break;
   case 3:  // AND
+    registerBinaryOperator(OperatorKind::LogicalAnd, token);
+    break;
   case 4:  // BIT OR
+    registerBinaryOperator(OperatorKind::BitwiseOr, token);
+    break;
   case 5:  // EXPO
+    registerBinaryOperator(OperatorKind::Power, token);
+    break;
   case 6:  // BIT AND
+    registerBinaryOperator(OperatorKind::BitwiseAnd, token);
+    break;
   case 7:  // OP REL
+    if (token)
+    {
+      const std::string lex = token->getLexeme();
+      if (lex == "==" || lex == "!=")
+      {
+        registerBinaryOperator(OperatorKind::RelationalEquality, token);
+      }
+      else
+      {
+        registerBinaryOperator(OperatorKind::RelationalCompare, token);
+      }
+    }
+    break;
   case 8:  // OP BITWISE
+    if (token)
+    {
+      const std::string lex = token->getLexeme();
+      if (lex == "^")
+      {
+        registerBinaryOperator(OperatorKind::BitwiseXor, token);
+      }
+      else if (lex == "<<")
+      {
+        registerBinaryOperator(OperatorKind::ShiftLeft, token);
+      }
+      else if (lex == ">>")
+      {
+        registerBinaryOperator(OperatorKind::ShiftRight, token);
+      }
+    }
+    break;
   case 9:  // ARIT LOWER
+    if (token)
+    {
+      const std::string lex = token->getLexeme();
+      if (lex == "+")
+      {
+        registerBinaryOperator(OperatorKind::Add, token);
+      }
+      else
+      {
+        registerBinaryOperator(OperatorKind::Subtract, token);
+      }
+    }
+    break;
   case 10: // ARIT UPPER
+    if (token)
+    {
+      const std::string lex = token->getLexeme();
+      if (lex == "*")
+      {
+        registerBinaryOperator(OperatorKind::Multiply, token);
+      }
+      else if (lex == "/")
+      {
+        registerBinaryOperator(OperatorKind::Divide, token);
+      }
+      else if (lex == "%")
+      {
+        registerBinaryOperator(OperatorKind::Modulo, token);
+      }
+    }
+    break;
   case 11: // NEG
+    if (token)
+    {
+      const std::string lex = token->getLexeme();
+      if (lex == "!")
+      {
+        registerUnaryOperator(UnaryKind::LogicalNot, token);
+      }
+      else if (lex == "~")
+      {
+        registerUnaryOperator(UnaryKind::BitwiseNot, token);
+      }
+      else if (lex == "-")
+      {
+        registerUnaryOperator(UnaryKind::ArithmeticNeg, token);
+      }
+    }
     break;
   case 12: // LEFT PARENTHESIS
   {
@@ -569,6 +918,7 @@ void Semantico::executeAction(int action, const Token *token)
     {
       headerState->parenthesisDepth++;
     }
+    pushExpressionContext();
     break;
   }
   case 13: // RIGHT PARENTHESIS
@@ -582,6 +932,21 @@ void Semantico::executeAction(int action, const Token *token)
         headerState->phase = ForHeaderPhase::Body;
         semanticTable.discardPendingExpression();
         resetCurrentVariable();
+        break;
+      }
+    }
+    if (!expressionStack.empty())
+    {
+      ExpressionContext finished = expressionStack.back();
+      expressionStack.pop_back();
+      if (finished.pendingOperator.has_value())
+      {
+        const auto &pending = *finished.pendingOperator;
+        throw SemanticError("Operador '" + pending.lexeme + "' sem operando à direita", pending.position, pending.length);
+      }
+      if (finished.hasAccumulated)
+      {
+        registerExpressionOperand(finished.accumulatedType, token);
       }
     }
     break;
