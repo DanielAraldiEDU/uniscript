@@ -171,7 +171,7 @@ namespace
     return -1;
   }
 
-  void ensureForBodyPhase(const Token *token)
+  void ensureForBodyPhase(Semantico &semantico, const Token *token)
   {
     if (!token)
       return;
@@ -190,6 +190,7 @@ namespace
     {
       semanticTable.discardPendingExpression();
       resetExpressionContexts();
+      semantico.resetCurrentVariable();
       headerState->bodyPhaseHandled = true;
     }
   }
@@ -1006,7 +1007,7 @@ void Semantico::executeAction(int action, const Token *token)
   }
   std::cerr << std::endl;
 #endif
-  ensureForBodyPhase(token);
+  ensureForBodyPhase(*this, token);
   switch (action)
   {
   case 1:
@@ -1212,6 +1213,8 @@ void Semantico::executeAction(int action, const Token *token)
       cout << value << " ";
     }
     Semantico::currentVariable.isUsed = true;
+    Semantico::currentVariable.name.clear();
+    Semantico::currentVariable.hasDeclarationKeyword = false;
     break;
   case 18:
     // READ
