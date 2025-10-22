@@ -1160,12 +1160,9 @@ void Semantico::executeAction(int action, const Token *token)
     if (token)
     {
       const std::string lexema = token->getLexeme();
-      if (Semantico::currentVariable.name.empty())
-      {
-        Semantico::currentVariable.name = lexema;
-        Semantico::currentVariable.position = token->getPosition();
-      }
       semanticTable.markUseIfDeclared(lexema, token->getPosition(), static_cast<int>(token->getLexeme().size()));
+      const auto retorno = semanticTable.getSymbolType(lexema);
+      registerExpressionOperand(retorno, token);
     }
     Semantico::currentVariable.isUsed = true;
     break;

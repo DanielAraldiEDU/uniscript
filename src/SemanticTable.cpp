@@ -109,7 +109,7 @@ public:
         fun.initialized = true;
         fun.isFunction = true;
         fun.hasExplicitType = true;
-        fun.isConstant = true;
+        fun.isConstant = false;
         fun.position = position;
         fun.line = line;
         fun.column = column;
@@ -177,7 +177,7 @@ public:
         if (!functionScopeDepths.empty()) {
             int functionScopeDepth = functionScopeDepths.back();
             const auto &sym = symbolTable[idx];
-            if (!sym.isFunction && sym.scope < functionScopeDepth) {
+            if (!sym.isFunction && sym.scope < functionScopeDepth && sym.scope != 0) {
                 addError("Identificador não declarado neste escopo: '" + name + "'", position, length);
                 return;
             }
