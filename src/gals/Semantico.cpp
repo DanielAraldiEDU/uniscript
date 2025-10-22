@@ -93,6 +93,8 @@ namespace
     ForHeaderPhase phase = ForHeaderPhase::Init;
     int parenthesisDepth = 0;
     bool initializerCommitted = false;
+    int headerEndPosition = -1;
+    bool bodyPhaseHandled = false;
   };
 
   static vector<ScopeKind> activeScopes;
@@ -106,6 +108,91 @@ namespace
     bool hasElementType = false;
   };
   static vector<ArrayLiteralState> arrayLiteralStates;
+
+  ForHeaderState *currentForHeaderState();
+  void resetExpressionContexts();
+
+  int findForHeaderEndPosition(int forTokenPos)
+  {
+    if (forTokenPos < 0)
+      return -1;
+    const std::string &src = Semantico::sourceCode;
+    const int limit = static_cast<int>(src.size());
+    int idx = forTokenPos;
+    bool foundOpening = false;
+    for (; idx < limit; ++idx)
+    {
+      char c = src[idx];
+      if (c == '(')
+      {
+        foundOpening = true;
+        ++idx;
+        break;
+      }
+    }
+    if (!foundOpening)
+      return -1;
+    int depth = 1;
+    bool inString = false;
+    for (; idx < limit; ++idx)
+    {
+      char c = src[idx];
+      if (inString)
+      {
+        if (c == '\\' && idx + 1 < limit)
+        {
+          ++idx;
+          continue;
+        }
+        if (c == '"')
+        {
+          inString = false;
+        }
+        continue;
+      }
+      if (c == '"')
+      {
+        inString = true;
+        continue;
+      }
+      if (c == '(')
+      {
+        ++depth;
+      }
+      else if (c == ')')
+      {
+        --depth;
+        if (depth == 0)
+        {
+          return idx;
+        }
+      }
+    }
+    return -1;
+  }
+
+  void ensureForBodyPhase(const Token *token)
+  {
+    if (!token)
+      return;
+    auto *headerState = currentForHeaderState();
+    if (!headerState)
+      return;
+    if (headerState->phase == ForHeaderPhase::Body && headerState->bodyPhaseHandled)
+      return;
+    if (headerState->headerEndPosition < 0)
+      return;
+    const int tokenPos = token->getPosition();
+    if (tokenPos <= headerState->headerEndPosition)
+      return;
+    headerState->phase = ForHeaderPhase::Body;
+    if (!headerState->bodyPhaseHandled)
+    {
+      semanticTable.discardPendingExpression();
+      resetExpressionContexts();
+      headerState->bodyPhaseHandled = true;
+    }
+  }
 
   enum class OperatorKind
   {
@@ -880,6 +967,7 @@ void Semantico::executeAction(int action, const Token *token)
   }
   std::cerr << std::endl;
 #endif
+  ensureForBodyPhase(token);
   switch (action)
   {
   case 1:
@@ -905,7 +993,12 @@ void Semantico::executeAction(int action, const Token *token)
     if (token)
     {
       const std::string lex = token->getLexeme();
-      if (lex == "==" || lex == "!=")
+      if (lex == "=")
+      {
+        semanticTable.discardPendingExpression();
+        resetExpressionContexts();
+      }
+      else if (lex == "==" || lex == "!=")
       {
         registerBinaryOperator(OperatorKind::RelationalEquality, token);
       }
@@ -1201,7 +1294,12 @@ void Semantico::executeAction(int action, const Token *token)
   case 37:
   {
     openScope(ScopeKind::ForLoop);
-    forHeaderStates.push_back({});
+    ForHeaderState state;
+    if (token)
+    {
+      state.headerEndPosition = findForHeaderEndPosition(token->getPosition());
+    }
+    forHeaderStates.push_back(state);
     break;
   }
   case 38:
