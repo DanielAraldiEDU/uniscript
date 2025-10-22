@@ -155,6 +155,7 @@ namespace
     SemanticTable::Types accumulatedType = SemanticTable::INT;
     std::optional<PendingOperator> pendingOperator;
     std::vector<PendingUnary> pendingUnary;
+    bool isIndexContext = false;
   };
 
   static std::vector<ExpressionContext> expressionStack;
@@ -173,9 +174,10 @@ namespace
     expressionStack.clear();
   }
 
-  void pushExpressionContext()
+  void pushExpressionContext(bool isIndex = false)
   {
     expressionStack.push_back({});
+    expressionStack.back().isIndexContext = isIndex;
   }
 
   std::string typeName(SemanticTable::Types type)
@@ -316,23 +318,30 @@ namespace
     (void)token;
     auto &ctx = ensureExpressionContext();
     applyPendingUnary(ctx, operandType);
+    bool updated = false;
     if (ctx.hasAccumulated)
     {
       if (ctx.pendingOperator.has_value())
       {
         operandType = evaluateBinaryOperation(*ctx.pendingOperator, ctx.accumulatedType, operandType);
         ctx.pendingOperator.reset();
+        ctx.accumulatedType = operandType;
+        updated = true;
       }
     }
     else
     {
+      ctx.accumulatedType = operandType;
       ctx.hasAccumulated = true;
+      updated = true;
     }
-    ctx.accumulatedType = operandType;
-    semanticTable.noteExprType(ctx.accumulatedType);
+    if (updated && !ctx.isIndexContext)
+    {
+      semanticTable.noteExprType(ctx.accumulatedType);
 #if SEMANTIC_DEBUG
-    std::cerr << "    [expr] operand=" << typeName(operandType) << " accumulated=" << typeName(ctx.accumulatedType) << std::endl;
+      std::cerr << "    [expr] operand=" << typeName(ctx.accumulatedType) << " accumulated=" << typeName(ctx.accumulatedType) << std::endl;
 #endif
+    }
   }
 
   void registerBinaryOperator(OperatorKind kind, const Token *token)
@@ -355,6 +364,31 @@ namespace
     unary.length = token ? static_cast<int>(token->getLexeme().size()) : 1;
     unary.lexeme = token ? token->getLexeme() : "";
     ctx.pendingUnary.push_back(unary);
+  }
+
+  void finalizeIndexExpression(const Token *token)
+  {
+    if (expressionStack.empty())
+      return;
+    ExpressionContext finished = expressionStack.back();
+    if (!finished.isIndexContext)
+      return;
+    expressionStack.pop_back();
+    if (finished.pendingOperator.has_value())
+    {
+      const auto &pending = *finished.pendingOperator;
+      throw SemanticError("Operador '" + pending.lexeme + "' sem operando à direita", pending.position, pending.length);
+    }
+    if (finished.hasAccumulated)
+    {
+      SemanticTable::Types indexType = finished.accumulatedType;
+      if (indexType != SemanticTable::INT)
+      {
+        int position = token ? token->getPosition() : -1;
+        int length = token ? static_cast<int>(token->getLexeme().size()) : 1;
+        throw SemanticError("Índice de vetor deve ser inteiro, encontrado '" + typeName(indexType) + "'", position, length);
+      }
+    }
   }
 
   bool hasOpeningBracketBefore(const Token *token)
@@ -397,6 +431,30 @@ namespace
       }
       return c == ']';
     }
+    return false;
+  }
+
+  bool hasIndexingBracketBefore(const Token *token)
+  {
+    if (!token)
+      return false;
+    const std::string &src = Semantico::sourceCode;
+    int pos = token->getPosition();
+    if (pos <= 0 || pos > static_cast<int>(src.size()))
+      return false;
+    int i = pos - 1;
+    while (i >= 0 && std::isspace(static_cast<unsigned char>(src[i])))
+      --i;
+    if (i < 0 || src[i] != '[')
+      return false;
+    int j = i - 1;
+    while (j >= 0 && std::isspace(static_cast<unsigned char>(src[j])))
+      --j;
+    if (j < 0)
+      return false;
+    const unsigned char before = static_cast<unsigned char>(src[j]);
+    if (std::isalnum(before) || before == '_' || before == ']')
+      return true;
     return false;
   }
 
@@ -515,11 +573,21 @@ namespace
       return;
     ensureForInitializerCommitted(semantico);
     const string lexema = token->getLexeme();
-    if (lexema == "[" || lexema == "]")
+    const bool startsIndex = hasIndexingBracketBefore(token);
+    if (startsIndex)
+    {
+      pushExpressionContext(true);
+    }
+    if (lexema == "[")
     {
       return;
     }
-    if (lexema == ")" || lexema == "(" || lexema == "{" || lexema == "}")
+    if (lexema == "]")
+    {
+      finalizeIndexExpression(token);
+      return;
+    }
+    if (lexema == ")" || lexema == "(" || lexema == "{" || lexema == "}" || lexema == "++" || lexema == "--")
     {
       return;
     }
@@ -620,6 +688,10 @@ namespace
         semanticTable.noteExprType(elemento);
       }
       Semantico::currentVariable.isInitialized = true;
+    }
+    if (endsArray)
+    {
+      finalizeIndexExpression(token);
     }
   }
 
@@ -984,6 +1056,11 @@ void Semantico::executeAction(int action, const Token *token)
       Semantico::currentVariable.value.push_back(lexema);
       Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
       Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
+      if (!lexema.empty())
+      {
+        const auto type = semanticTable.getSymbolType(lexema);
+        registerExpressionOperand(type, token);
+      }
     }
     break;
   case 16:
@@ -1037,15 +1114,27 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 24:
     // VALUE INCREMENT/DECREMENT
-    Semantico::currentVariable.name = token->getLexeme();
-    Semantico::currentVariable.position = token ? token->getPosition() : -1;
+  {
+    const std::string identifier = token ? token->getLexeme() : "";
+    const int position = token ? token->getPosition() : -1;
+    const int length = token ? static_cast<int>(token->getLexeme().size()) : 1;
+    const bool standalone = Semantico::currentVariable.name.empty();
+    if (standalone && !identifier.empty())
     {
-      const auto [line, column] = offsetToLineCol(Semantico::currentVariable.position);
+      Semantico::currentVariable.name = identifier;
+      Semantico::currentVariable.position = position;
+      const auto [line, column] = offsetToLineCol(position);
       Semantico::currentVariable.line = line;
       Semantico::currentVariable.column = column;
     }
-    semanticTable.markUseIfDeclared(Semantico::currentVariable.name, token ? token->getPosition() : -1, token ? static_cast<int>(token->getLexeme().size()) : 1);
+    semanticTable.markUseIfDeclared(identifier, position, length);
+    if (!identifier.empty())
+    {
+      const auto symbolType = semanticTable.getSymbolType(identifier);
+      registerExpressionOperand(symbolType, token);
+    }
     break;
+  }
   case 25:
     // CONST/VAR
     Semantico::currentVariable.isConstant = isConstant(token->getLexeme());
@@ -1060,9 +1149,11 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 28:
     // OPEN BRACKET INDEX
+    pushExpressionContext();
     break;
   case 29:
     // CLOSE BRACKET INDEX
+    finalizeIndexExpression(token);
     break;
   case 30:
     // FUNCTION TYPE
