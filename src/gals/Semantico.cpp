@@ -16,7 +16,7 @@ using namespace std;
 SemanticTable semanticTable;
 
 bool Semantico::isTypeParameter = false;
-Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, -1, -1, -1};
+Semantico::Variable Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, false, -1, -1, -1};
 vector<Semantico::Variable> Semantico::currentParameters = {};
 std::string Semantico::sourceCode = "";
 
@@ -800,6 +800,17 @@ namespace
       return;
     }
 
+    if (!Semantico::currentVariable.isFunction)
+    {
+      if (!Semantico::currentVariable.hasDeclarationKeyword)
+      {
+        const std::string alvo = !Semantico::currentVariable.name.empty() ? Semantico::currentVariable.name : token->getLexeme();
+        const int position = token ? token->getPosition() : -1;
+        const int length = token ? static_cast<int>(token->getLexeme().size()) : 1;
+        throw SemanticError("Declaração de variável requer 'var' ou 'const' antes de '" + alvo + "'", position, length);
+      }
+    }
+
     const bool arraySuffix = typeHasArraySuffix(token);
     Semantico::currentVariable.type = tipo;
     Semantico::currentVariable.isInitialized = false;
@@ -845,7 +856,7 @@ namespace
     {
       const int position = token ? token->getPosition() : -1;
       const auto [line, column] = offsetToLineCol(position);
-      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, true, false, false, false, false, position, line, column});
+      Semantico::currentParameters.push_back({nome, Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, true, false, false, false, false, false, position, line, column});
       Semantico::isTypeParameter = true;
     }
     else
@@ -859,6 +870,34 @@ namespace
       const auto [line, column] = offsetToLineCol(Semantico::currentVariable.position);
       Semantico::currentVariable.line = line;
       Semantico::currentVariable.column = column;
+      if (!Semantico::currentVariable.hasDeclarationKeyword && Semantico::currentVariable.position > 0)
+      {
+        const std::string &src = Semantico::sourceCode;
+        int idx = Semantico::currentVariable.position - 1;
+        while (idx >= 0 && std::isspace(static_cast<unsigned char>(src[idx])))
+        {
+          --idx;
+        }
+        int end = idx;
+        while (idx >= 0 && std::isalpha(static_cast<unsigned char>(src[idx])))
+        {
+          --idx;
+        }
+        if (end >= 0 && end >= idx + 1)
+        {
+          const std::string keyword = src.substr(idx + 1, end - idx);
+          if (keyword == "var")
+          {
+            Semantico::currentVariable.hasDeclarationKeyword = true;
+            Semantico::currentVariable.isConstant = false;
+          }
+          else if (keyword == "const")
+          {
+            Semantico::currentVariable.hasDeclarationKeyword = true;
+            Semantico::currentVariable.isConstant = true;
+          }
+        }
+      }
     }
   }
 
@@ -907,7 +946,7 @@ namespace
 
 void Semantico::resetCurrentVariable()
 {
-  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, -1, -1, -1};
+  Semantico::currentVariable = {"", Semantico::Type::NULLABLE, {}, {}, {}, -1, false, false, false, false, false, false, false, false, -1, -1, -1};
   Semantico::isTypeParameter = false;
   resetExpressionContexts();
 }
@@ -1230,7 +1269,17 @@ void Semantico::executeAction(int action, const Token *token)
   }
   case 25:
     // CONST/VAR
-    Semantico::currentVariable.isConstant = isConstant(token->getLexeme());
+    if (token)
+    {
+      const std::string lexema = token->getLexeme();
+      Semantico::currentVariable.isConstant = isConstant(lexema);
+      Semantico::currentVariable.hasDeclarationKeyword = (lexema == "var" || lexema == "const");
+    }
+    else
+    {
+      Semantico::currentVariable.isConstant = false;
+      Semantico::currentVariable.hasDeclarationKeyword = false;
+    }
     break;
   case 26:
     // MULTI VAR DECLARATION

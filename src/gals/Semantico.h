@@ -57,6 +57,7 @@ public:
     bool isInitialized;
     bool isUsed;
     bool isConstant;
+    bool hasDeclarationKeyword;
     bool isParameter;
     bool isFunction;
     bool isArray;
