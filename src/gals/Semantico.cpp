@@ -862,6 +862,12 @@ namespace
     }
     else
     {
+      if (Semantico::currentVariable.name.empty())
+      {
+        semanticTable.discardPendingExpression();
+        resetExpressionContexts();
+        Semantico::currentVariable.hasDeclarationKeyword = false;
+      }
       Semantico::currentVariable.name = nome;
       Semantico::isTypeParameter = false;
       Semantico::currentVariable.isArray = semanticTable.isArraySymbol(nome);
@@ -1008,6 +1014,12 @@ void Semantico::executeAction(int action, const Token *token)
   std::cerr << std::endl;
 #endif
   ensureForBodyPhase(*this, token);
+  if (token && Semantico::currentVariable.name.empty() && !Semantico::currentVariable.isFunction)
+  {
+    semanticTable.discardPendingExpression();
+    resetExpressionContexts();
+    Semantico::currentVariable.hasDeclarationKeyword = false;
+  }
   switch (action)
   {
   case 1:
@@ -1288,6 +1300,7 @@ void Semantico::executeAction(int action, const Token *token)
     // ATTRIBUTION INCREMENT/DECREMENT
     Semantico::currentVariable.isInitialized = true;
     Semantico::currentVariable.isUsed = true;
+    Semantico::currentVariable.hasDeclarationKeyword = false;
     break;
   case 28:
     // OPEN BRACKET INDEX
