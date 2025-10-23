@@ -1,4 +1,7 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include "gals/Lexico.h"
 #include "gals/Sintatico.h"
 #include "gals/Semantico.h"
@@ -10,7 +13,22 @@ int main () {
   Sintatico sint;
   Semantico sem;
 
-  lex.setInput("print(\"Hello, World!\");");
+  // Temporalmente, o arquivo de entrada estara fixo --------------------------
+  string filename = "../prompt.txt";
+  ifstream file(filename);
+  
+  if (!file.is_open()) {
+    cerr << "Erro ao abrir o arquivo: " << filename << endl;
+    return 1;
+  }
+  
+  stringstream buffer;
+  buffer << file.rdbuf();
+  string content = buffer.str();
+  file.close();
+  
+  lex.setInput(content.c_str());
+  // Não esquecer de remover o arquivo prompt.txt depois ----------------------
 
   try {
     sint.parse(&lex, &sem);

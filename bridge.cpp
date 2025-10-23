@@ -1,6 +1,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <string>
+#include <vector>
 
 #include "src/gals/Lexico.h"
 #include "src/gals/Sintatico.h"
@@ -35,44 +37,125 @@ static std::string jsonEscape(const char* s) {
   return out;
 }
 
+static std::string jsonEscape(const std::string& s) {
+  return jsonEscape(s.c_str());
+}
+
+static std::string boolToJson(bool value) {
+  return value ? "true" : "false";
+}
+
+static std::string symbolTableToJson(const std::vector<ExportedSymbol>& symbols) {
+  std::string json = "[";
+  bool first = true;
+  for (const auto& sym : symbols) {
+    if (!first) json += ",";
+    first = false;
+
+    json += "{";
+    json += "\"name\":\"" + jsonEscape(sym.name) + "\"";
+    json += ",\"type\":\"" + jsonEscape(sym.type) + "\"";
+    json += ",\"initialized\":" + boolToJson(sym.initialized);
+    json += ",\"used\":" + boolToJson(sym.used);
+    json += ",\"scope\":" + std::to_string(sym.scope);
+    json += ",\"isParameter\":" + boolToJson(sym.isParameter);
+    json += ",\"position\":" + std::to_string(sym.position);
+    json += ",\"line\":" + std::to_string(sym.line);
+    json += ",\"column\":" + std::to_string(sym.column);
+    json += ",\"isArray\":" + boolToJson(sym.isArray);
+    json += ",\"isFunction\":" + boolToJson(sym.isFunction);
+    json += ",\"isConstant\":" + boolToJson(sym.isConstant);
+    json += "}";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string diagnosticsToJson(const std::vector<ExportedDiagnostic>& diagnostics) {
+  std::string json = "[";
+  bool first = true;
+  for (const auto& d : diagnostics) {
+    if (!first) json += ",";
+    first = false;
+    json += "{\"severity\":\"" + jsonEscape(d.severity) + "\",\"message\":\"" + jsonEscape(d.message) + "\",\"position\":" + std::to_string(d.position) + ",\"length\":" + std::to_string(d.length) + "}";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string successResponse(const std::vector<ExportedSymbol>& symbols,
+                                   const std::vector<ExportedDiagnostic>& diagnostics) {
+  std::string json = "{\"ok\":true";
+  json += ",\"symbolTable\":" + symbolTableToJson(symbols);
+  json += ",\"diagnostics\":" + diagnosticsToJson(diagnostics);
+  json += "}";
+  return json;
+}
+
+static std::string errorResponse(const char* kind, const char* message, int pos, int length) {
+  std::string json = "{\"ok\":false";
+  if (kind) {
+    json += ",\"kind\":\"";
+    json += jsonEscape(kind);
+    json += "\"";
+  }
+  if (message) {
+    json += ",\"message\":\"";
+    json += jsonEscape(message);
+    json += "\"";
+  }
+  json += ",\"pos\":" + std::to_string(pos);
+  json += ",\"length\":" + std::to_string(length <= 0 ? 1 : length);
+  json += ",\"symbolTable\":[]";
+  json += ",\"diagnostics\":[";
+  if (message) {
+    json += "{\"severity\":\"error\",\"message\":\"" + jsonEscape(message) + "\",\"position\":" + std::to_string(pos) + ",\"length\":" + std::to_string(length <= 0 ? 1 : length) + "}";
+  }
+  json += "]";
+  json += "}";
+  return json;
+}
+
+static char* duplicateString(const std::string& s) {
+  char* out = static_cast<char*>(std::malloc(s.size() + 1));
+  if (!out) {
+    return nullptr;
+  }
+  std::memcpy(out, s.c_str(), s.size() + 1);
+  return out;
+}
+
 extern "C" {
 __attribute__((used))
 char* uniscript_compile(const char* src) {
+  Lexico lex;
+  Sintatico sint;
+  Semantico sem;
+
+  sem.resetState();
+  sem.setSourceCode(src);
+  lex.setInput(src);
+
   try {
-    Lexico lex;
-    Sintatico sint;
-    Semantico sem;
-
-    lex.setInput(src);
     sint.parse(&lex, &sem);
-
-    const char* ok = "{\"ok\":true}";
-    char* out = (char*)std::malloc(std::strlen(ok) + 1);
-    std::strcpy(out, ok);
-    return out;
+    finalizeSemanticAnalysis();
+    auto symbols = snapshotSymbolTable();
+    auto diagnostics = snapshotDiagnostics();
+    std::string json = successResponse(symbols, diagnostics);
+    sem.resetState();
+    return duplicateString(json);
   } catch (const LexicalError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"lexical\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    sem.resetState();
+    return duplicateString(errorResponse("lexical", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (const SyntacticError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"syntactic\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    sem.resetState();
+    return duplicateString(errorResponse("syntactic", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (const SemanticError& e) {
-    const std::string msg = jsonEscape(e.getMessage());
-    const std::string json = std::string("{\"ok\":false,\"kind\":\"semantic\",\"message\":\"") + msg + "\",\"pos\":" + std::to_string(e.getPosition()) + "}";
-    char* out = (char*)std::malloc(json.size() + 1);
-    std::strcpy(out, json.c_str());
-    return out;
+    sem.resetState();
+    return duplicateString(errorResponse("semantic", e.getMessage(), e.getPosition(), e.getLength()));
   } catch (...) {
-    const char* unk = "{\"ok\":false,\"kind\":\"unknown\",\"message\":\"unknown error\"}";
-    char* out = (char*)std::malloc(std::strlen(unk) + 1);
-    std::strcpy(out, unk);
-    return out;
+    sem.resetState();
+    return duplicateString(errorResponse("unknown", "unknown error", -1, 1));
   }
 }
 

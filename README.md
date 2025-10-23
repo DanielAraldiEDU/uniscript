@@ -4,24 +4,25 @@ Uma linguagem de programação simples, prática e única. Essa linguagem de pro
 
 ## Como executar
 
-- GUI (IDE):
-  - Pré‑requisitos: Qt6 (ou Qt5) e `pkg-config` instalados.
-  - Compilar: `make gui`
-  - Rodar: `make run-gui`
+- CLI rápida:
+  - Compilar: `make`
+  - Rodar: `make run`
+  - Script direto (compila e executa): `./scripts/compile-main.sh [args...]`
 
-A GUI fica em `src/gui` e oferece:
-
-- Editor de código
-- Botão/ação “Compilar” para rodar a análise sintática.
-- Console de mensagens para erros e depuração.
-
-## Web (React + WASM)
+## IDE Web (React + WASM)
 
 Interface web client-side em `web/`, compilando o núcleo C++ para WebAssembly.
 
 Uso via npm:
 
-- Gerar WASM e instalar deps: `npm run setup`
+- Preparar (WASM + deps): `npm run setup`
 - Desenvolvimento: `npm run dev`
 - Build produção: `npm run build`
 - Preview: `npm run preview`
+
+
+#### Problemas
+
+- [ ] Não ta impedindo criação de variavel com o mesmo nome.
+- [ ] Tem que encerrar a execução caso o erro seja encontrado? ou comentar todos os warnings quero ideias. 
+- [ ] implementar os bereguenaite de for, acho que precisa, boa noite.

@@ -1,6 +1,40 @@
 let modPromise: Promise<any> | null = null
 
-export async function compileSource(code: string) {
+export type CompileKind = 'lexical' | 'syntactic' | 'semantic' | 'unknown'
+
+export interface SymbolInfo {
+  name: string
+  type: string
+  isConstant: boolean
+  initialized: boolean
+  used: boolean
+  scope: number
+  isParameter: boolean
+  position: number
+  line: number
+  column: number
+  isArray: boolean
+  isFunction: boolean
+}
+
+export interface DiagnosticInfo {
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  position: number
+  length: number
+}
+
+export interface CompileResult {
+  ok: boolean
+  kind?: CompileKind
+  message?: string
+  pos?: number
+  length?: number
+  symbolTable: SymbolInfo[]
+  diagnostics: DiagnosticInfo[]
+}
+
+export async function compileSource(code: string): Promise<CompileResult> {
   if (!modPromise) {
     modPromise = (async () => {
       const factory = (window as any).createUniscriptModule
@@ -16,17 +50,67 @@ export async function compileSource(code: string) {
       })
     })()
   }
+
   const Module = await modPromise
   const fn = Module.cwrap('uniscript_compile', 'number', ['string'])
   const ptr = fn(code)
   const json = Module.UTF8ToString(ptr)
   Module._free(ptr)
-  return JSON.parse(json) as {
-    ok: boolean
-    kind?: 'lexical' | 'syntactic' | 'semantic' | 'unknown'
-    message?: string
-    pos?: number
+  const raw = JSON.parse(json)
+  return normalizeCompileResult(raw)
+}
+
+function normalizeCompileResult(raw: any): CompileResult {
+  const kind = typeof raw?.kind === 'string' && isCompileKind(raw.kind) ? raw.kind : undefined
+  const message = typeof raw?.message === 'string' ? raw.message : undefined
+  const pos = typeof raw?.pos === 'number' ? raw.pos : undefined
+  const symbolTable = Array.isArray(raw?.symbolTable) ? raw.symbolTable.map(normalizeSymbolInfo) : []
+  const diagnostics = Array.isArray(raw?.diagnostics) ? raw.diagnostics.map(normalizeDiagnosticInfo) : []
+
+  return {
+    ok: Boolean(raw?.ok),
+    kind,
+    message,
+    pos,
+    length: typeof raw?.length === 'number' ? raw.length : undefined,
+    symbolTable,
+    diagnostics
   }
+}
+
+function normalizeSymbolInfo(raw: any): SymbolInfo {
+  const scopeValue = Number(raw?.scope)
+  const positionValue = Number(raw?.position)
+  const lineValue = Number(raw?.line)
+  const columnValue = Number(raw?.column)
+  return {
+    name: typeof raw?.name === 'string' ? raw.name : '',
+    type: typeof raw?.type === 'string' ? raw.type : '',
+    isConstant: Boolean(raw?.isConstant),
+    initialized: Boolean(raw?.initialized),
+    used: Boolean(raw?.used),
+    scope: Number.isFinite(scopeValue) ? scopeValue : -1,
+    isParameter: Boolean(raw?.isParameter),
+    position: Number.isFinite(positionValue) ? positionValue : -1,
+    line: Number.isFinite(lineValue) ? lineValue : -1,
+    column: Number.isFinite(columnValue) ? columnValue : -1,
+    isArray: Boolean(raw?.isArray),
+    isFunction: Boolean(raw?.isFunction)
+  }
+}
+
+function normalizeDiagnosticInfo(raw: any): DiagnosticInfo {
+  const severity = typeof raw?.severity === 'string' ? raw.severity : 'info'
+  return {
+    severity: severity === 'error' || severity === 'warning' ? severity : 'info',
+    message: typeof raw?.message === 'string' ? raw.message : '',
+    position: Number.isFinite(Number(raw?.position)) ? Number(raw?.position) : -1,
+    length: Number.isFinite(Number(raw?.length)) ? Number(raw?.length) : 1
+  }
+}
+
+function isCompileKind(value: any): value is CompileKind {
+  return value === 'lexical' || value === 'syntactic' || value === 'semantic' || value === 'unknown'
 }
 
 export function posToLineCol(text: string, pos: number) {

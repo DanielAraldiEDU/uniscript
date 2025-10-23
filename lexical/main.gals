@@ -1,7 +1,7 @@
 #Options
 GenerateScanner = true
 GenerateParser = true
-Language = Java
+Language = C++
 ScannerName = Lexico
 ParserName = Sintatico
 SemanticName = Semantico
@@ -33,7 +33,6 @@ KEY_TYPE_INT = KEY_VARIABLE:"int"
 KEY_TYPE_FLOAT = KEY_VARIABLE:"float"
 KEY_TYPE_STRING = KEY_VARIABLE:"string"
 KEY_TYPE_BOOLEAN = KEY_VARIABLE:"bool"
-KEY_TYPE_FUNC = KEY_VARIABLE:"func"
 KEY_TYPE_VOID = KEY_VARIABLE:"void"
 KEY_IF = KEY_VARIABLE:"if"
 KEY_ELSE = KEY_VARIABLE:"else"
@@ -50,7 +49,6 @@ KEY_CASE = KEY_VARIABLE:"case"
 KEY_BREAK = KEY_VARIABLE:"break"
 KEY_DEFAULT = KEY_VARIABLE:"default"
 KEY_THROW = KEY_VARIABLE:"throw"
-KEY_CONTINUE = KEY_VARIABLE:"continue"
 KEY_TRUE = KEY_VARIABLE:"true"
 KEY_FALSE = KEY_VARIABLE:"false"
 KEY_NULL = KEY_VARIABLE:"null"
@@ -118,10 +116,10 @@ KEY_RBRACE: "}"
 <whilescope>
 <fortype>
 <forvalue>
+<forparams>
 <forscope>
 <attrstate>
 <multiattrscope>
-<attrarrayscope>
 <attrscope>
 <arrayvalues>
 <arrayscope>
@@ -141,6 +139,7 @@ KEY_RBRACE: "}"
 <for>
 <attrvalue>
 <attrarray>
+<arraybyindexscope>
 <attrarraybyindex>
 <attr>
 <switchcase>
@@ -156,7 +155,6 @@ KEY_RBRACE: "}"
 <comments>
 <return>
 <break>
-<continue>
 <throw>
 <funccall>
 <functioncall>
@@ -186,44 +184,40 @@ KEY_RBRACE: "}"
 #Grammar
 // Sintaxes
 <rowswritten> ::= KEY_LBRACE <commands> KEY_RBRACE;
-<emptybracket> ::= KEY_LBRACKET KEY_RBRACKET;
+<emptybracket> ::= KEY_LBRACKET #20 KEY_RBRACKET #21;
 <emptybrace> ::= KEY_LBRACE KEY_RBRACE;
-<typeofvalue> ::= KEY_VARIABLE KEY_COLON <type>;
+<typeofvalue> ::= KEY_VARIABLE #22 KEY_COLON <type>;
 
-<deffunction> ::= KEY_FUNCTION KEY_VARIABLE KEY_LPAREN KEY_RPAREN KEY_COLON
-  | KEY_FUNCTION KEY_VARIABLE KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
+<deffunction> ::= KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN KEY_RPAREN KEY_COLON
+  | KEY_FUNCTION #30 KEY_VARIABLE #23 KEY_LPAREN <params> KEY_RPAREN KEY_COLON;
   
-<increment> ::= KEY_VARIABLE KEY_INCREMENT;
-<arrayincrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT;
-<decrement> ::= KEY_VARIABLE KEY_DECREMENT;
-<arraydecrement> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT;
-<whilescope> ::= KEY_WHILE KEY_LPAREN <exp> KEY_RPAREN;
+<increment> ::= KEY_VARIABLE #24 KEY_INCREMENT #27;
+<arrayincrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_INCREMENT #27;
+<decrement> ::= KEY_VARIABLE #24 KEY_DECREMENT #27;
+<arraydecrement> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET KEY_DECREMENT #27;
+<whilescope> ::= KEY_WHILE #36 KEY_LPAREN <exp> KEY_RPAREN;
 <fortype> ::= KEY_TYPE_FLOAT | KEY_TYPE_INT; 
-<forvalue> ::= KEY_INTEGER | KEY_DECIMAL; 
-<forscope> ::= KEY_FOR KEY_LPAREN <attr> <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
-<attrstate> ::= KEY_CONST | KEY_VAR;
-<multiattrscope> ::= KEY_VARIABLE KEY_COMMA <multiattrscope> | KEY_VARIABLE KEY_COMMA <typeofvalue>;
-<attrarrayscope> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET KEY_COLON <type>;
-<attrscope> ::= <typeofvalue> 
-  | <multiattrscope> 
-  | <attrstate> <typeofvalue> 
-  | <attrstate> <multiattrscope>
-  | <indexedvalue>                  
-  | <attrstate> <indexedvalue>;      
+<forvalue> ::= KEY_INTEGER #40 | KEY_DECIMAL #40 | <indexedvalue> | <arraybyindexscope>; 
+<forparams> ::= KEY_VARIABLE #38 KEY_COLON <fortype> #39 KEY_ATTR #7 <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN
+  | KEY_VARIABLE #38 KEY_ATTR #7 <forvalue> KEY_SEMICOLON <exp> KEY_SEMICOLON <exp> KEY_RPAREN;
+<forscope> ::= KEY_FOR #37 KEY_LPAREN KEY_VAR <forparams> | KEY_FOR #37 KEY_LPAREN <forparams>;
+<attrstate> ::= KEY_CONST #25 | KEY_VAR #25;
+<multiattrscope> ::= KEY_VARIABLE #26 KEY_COMMA <multiattrscope> | KEY_VARIABLE #26 KEY_COMMA <typeofvalue>;
+<attrscope> ::= KEY_VARIABLE #22 | <attrstate> <typeofvalue> | <attrstate> <multiattrscope> | <indexedvalue>;      
 
 <arrayvalues> ::= <exp> KEY_COMMA <arrayvalues> | <exp>;
 <arrayscope> ::= <emptybracket> | KEY_LBRACKET <arrayvalues> KEY_RBRACKET;
-<elifscope> ::= KEY_ELIF KEY_LPAREN <exp> KEY_RPAREN;
-<ifscope> ::= KEY_IF KEY_LPAREN <exp> KEY_RPAREN;
+<elifscope> ::= KEY_ELIF #34 KEY_LPAREN <exp> KEY_RPAREN;
+<ifscope> ::= KEY_IF #34 KEY_LPAREN <exp> KEY_RPAREN;
 
-<printscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON;
-<readscope> ::= KEY_LPAREN KEY_VARIABLE KEY_RPAREN KEY_SEMICOLON
-  | KEY_LPAREN <indexedvalue> KEY_RPAREN KEY_SEMICOLON;
+<printscope> ::= KEY_LPAREN <exp> KEY_RPAREN KEY_SEMICOLON #17 | KEY_LPAREN <arrayscope> #17 KEY_RPAREN KEY_SEMICOLON;
+<readscope> ::= KEY_LPAREN KEY_VARIABLE #18 KEY_RPAREN KEY_SEMICOLON
+  | KEY_LPAREN <indexedvalue> #18 KEY_RPAREN KEY_SEMICOLON;
 
 // Types
-<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_FUNC | KEY_TYPE_VOID;
-<complextype> ::= <primitivetype> <emptybracket>;
-<type> ::= <primitivetype> | <complextype>;
+<primitivetype> ::= KEY_TYPE_INT | KEY_TYPE_FLOAT | KEY_TYPE_STRING | KEY_TYPE_BOOLEAN | KEY_TYPE_VOID;
+<complextype> ::= <primitivetype> #19 <emptybracket>;
+<type> ::= <primitivetype> #19 | <complextype>;
 
 // Parameters
 <param> ::= <typeofvalue> | <typeofvalue> KEY_COMMA <param>;
@@ -234,19 +228,19 @@ KEY_RBRACE: "}"
 <function> ::= <deffunction> <type> <emptybrace> | <deffunction> <type> <rowswritten>;
 
 // Loops
-<while> ::= <whilescope> <statement>;
-<dowhile> ::= KEY_DO <statement> <whilescope> KEY_SEMICOLON;
-<for> ::= <forscope> <statement>; 
+<while> ::= <whilescope> <statement> #45;
+<dowhile> ::= KEY_DO #35 <statement> #46 <whilescope> KEY_SEMICOLON #47;
+<for> ::= <forscope> <statement> #48; 
 
 // Attribution
 <attrvalue> ::= <exp> KEY_COMMA <attrvalue> | <exp> KEY_SEMICOLON;
 <attrarray> ::= <arrayscope> KEY_COMMA <attrarray> | <array>;
-<attrarraybyindex> ::= <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_COMMA <attrarraybyindex>
-  | <arrayscope> KEY_LBRACKET <exp> KEY_RBRACKET KEY_SEMICOLON;
+<arraybyindexscope> ::= <arrayscope> KEY_LBRACKET #28 <exp> KEY_RBRACKET #29;
+<attrarraybyindex> ::= <arraybyindexscope> KEY_COMMA <attrarraybyindex> | <arraybyindexscope> KEY_SEMICOLON;
 
-<attr> ::= <attrscope> KEY_ATTR <attrvalue>
-  | <attrscope> KEY_ATTR <attrarray>
-  | <attrscope> KEY_ATTR <attrarraybyindex>
+<attr> ::= <attrscope> KEY_ATTR #7 <attrvalue>
+  | <attrscope> KEY_ATTR #7 <attrarray>
+  | <attrscope> KEY_ATTR #7 <attrarraybyindex>
   | <attrscope> KEY_SEMICOLON
   | <increment> KEY_SEMICOLON 
   | <arrayincrement> KEY_SEMICOLON 
@@ -254,15 +248,15 @@ KEY_RBRACE: "}"
   | <arraydecrement> KEY_SEMICOLON;
 
 // Conditionals
-<switchcase> ::= KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE 
-  | KEY_SWITCH KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> <default> KEY_RBRACE;
+<switchcase> ::= KEY_SWITCH #41 KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> KEY_RBRACE #49
+  | KEY_SWITCH #41 KEY_LPAREN <exp> KEY_RPAREN KEY_LBRACE <cases> <default> KEY_RBRACE #49;
 <cases> ::= <case> <cases> | <case>;
-<case> ::= KEY_CASE <exp> KEY_COLON <commands>;
-<default> ::= KEY_DEFAULT KEY_COLON <commands>;
+<case> ::= KEY_CASE #41 <exp> KEY_COLON <commands> #50;
+<default> ::= KEY_DEFAULT #41 KEY_COLON <commands> #51;
 
-<else> ::= KEY_ELSE <statement>;
-<elif> ::= <elifscope> <statement> | <elifscope> <statement> <else>;
-<if> ::= <ifscope> <statement> | <ifscope> <statement> <else> | <ifscope> <statement> <elif>;
+<else> ::= KEY_ELSE #34 <statement>;
+<elif> ::= <elifscope> <statement> #44 | <elifscope> <statement> #44 <else> #44;
+<if> ::= <ifscope> <statement> #44 | <ifscope> <statement> #44 <else> #44 | <ifscope> <statement> #44 <elif>;
 
 // Array
 <array> ::= <arrayscope> KEY_SEMICOLON;
@@ -272,59 +266,55 @@ KEY_RBRACE: "}"
 <read> ::= KEY_READ <readscope>;
 
 // Comments
-<comments> ::= KEY_COMMENT_LINE | KEY_COMMENT_MULT_LINE;
+<comments> ::= KEY_COMMENT_LINE #16 | KEY_COMMENT_MULT_LINE #16;
 
 // Finals
-<return> ::= KEY_RETURN <exp> KEY_SEMICOLON
-  | KEY_RETURN KEY_SEMICOLON;
-<break> ::= KEY_BREAK KEY_SEMICOLON;
-<continue> ::= KEY_CONTINUE KEY_SEMICOLON;
-<throw> ::= KEY_THROW <exp> KEY_SEMICOLON;
+<return> ::= KEY_RETURN #31 <exp> KEY_SEMICOLON
+  | KEY_RETURN #31 KEY_SEMICOLON;
+<break> ::= KEY_BREAK #32 KEY_SEMICOLON;
+<throw> ::= KEY_THROW #33 <exp> KEY_SEMICOLON;
 
 // Commands
-<funccall> ::= KEY_VARIABLE KEY_LPAREN KEY_RPAREN
-  | KEY_VARIABLE KEY_LPAREN <attrsparams> KEY_RPAREN;
+<funccall> ::= KEY_VARIABLE #14 KEY_LPAREN KEY_RPAREN | KEY_VARIABLE #14 KEY_LPAREN <attrsparams> KEY_RPAREN;
 
-<functioncall> ::= <funccall> KEY_SEMICOLON;
+<functioncall> ::= <funccall> KEY_SEMICOLON #42;
 
-<statement> ::= <rowswritten> | <single_command>;
-<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <continue> | <throw> | <array>;
-<program> ::= <commands>;
+<statement> ::= <rowswritten> | <single_command> #42;
+<single_command> ::= <print> | <read> | <attr> | <return> | <break> | <throw>;
+<program> ::= <commands> #99;
 <commands> ::= <command> <commands> | <command>;
-<command> ::= <single_command> | <function> | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
+<command> ::= <single_command> #42 | <function> #43 | <switchcase> | <comments> | <if> | <while> | <for> | <dowhile> | <functioncall>;
   
 // Expressions
-<exp>  ::= <exp> KEY_OR <exp1> | <exp1>;
-<exp1> ::= <exp1> KEY_AND <exp2> | <exp2>;
-<exp2> ::= <exp2> KEY_BIT_OR <exp3> | <exp3>;
-<exp3> ::= <exp3> KEY_EXPO <exp4> | <exp4>;
-<exp4> ::= <exp4> KEY_BIT_AND <exp5> | <exp5>;
-<exp5> ::= <exp5> <op_rel> <exp6> | <exp6>;
-<exp6> ::= <exp6> <op_bitwise> <exp7> | <exp7>;
-<exp7> ::= <exp7> <op_arit_baixa> <exp8> | <exp8>;
-<exp8> ::= <exp8> <op_arit_alta> <exp9> | <exp9> ;
-<exp9> ::= <op_neg> <value> | <value>;
-<exp10> ::= <increment> | <decrement>;
+<exp>  ::= <exp> KEY_OR #2 <exp1> | <exp1>;
+<exp1> ::= <exp1> KEY_AND #3 <exp2> | <exp2>;
+<exp2> ::= <exp2> KEY_BIT_OR #4 <exp3> | <exp3>;
+<exp3> ::= <exp3> KEY_EXPO #5 <exp4> | <exp4>;
+<exp4> ::= <exp4> KEY_BIT_AND #6 <exp5> | <exp5>;
+<exp5> ::= <exp5> <op_rel> #7 <exp6> | <exp6>;
+<exp6> ::= <exp6> <op_bitwise> #8 <exp7> | <exp7>;
+<exp7> ::= <exp7> <op_arit_baixa> #9 <exp8> | <exp8>;
+<exp8> ::= <exp8> <op_arit_alta> #10 <exp9> | <exp9> ;
+<exp9> ::= <op_neg> #11 <value> #1 | <value> #1;
+<exp10> ::= <increment>| <decrement>;
 <exp11> ::= <arrayincrement> | <arraydecrement>;
 
 // Values
 <value> ::= KEY_VARIABLE
-  | KEY_DECIMAL 
-  | KEY_INTEGER 
-  | KEY_BINARY 
-  | KEY_HEXADECIMAL 
-  | KEY_STRING 
-  | KEY_TRUE 
-  | KEY_FALSE 
-  | KEY_NULL 
-  | KEY_LPAREN <exp> KEY_RPAREN
+  | KEY_DECIMAL
+  | KEY_INTEGER
+  | KEY_BINARY
+  | KEY_HEXADECIMAL
+  | KEY_STRING
+  | KEY_TRUE
+  | KEY_FALSE
+  | KEY_LPAREN #12 <exp> KEY_RPAREN #13
   | <exp10>
   | <exp11>
   | <funccall>
   | <indexedvalue>;
 
-<indexedvalue> ::= KEY_VARIABLE KEY_LBRACKET <exp> KEY_RBRACKET
-  | <indexedvalue> KEY_LBRACKET <exp> KEY_RBRACKET;
+<indexedvalue> ::= KEY_VARIABLE #15 KEY_LBRACKET <exp> KEY_RBRACKET;
 
 // Operations
 <op_rel> ::= KEY_GREATER | KEY_LESSER | KEY_EQUAL | KEY_GREATER_EQUAL | KEY_LESSER_EQUAL | KEY_ATTR | KEY_NOT_EQUAL; 

@@ -5,16 +5,17 @@
 #include <QLabel>
 #include <QPalette>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QDateTime>
 #include <QAction>
 #include <QTextCursor>
 #include <QTextCharFormat>
 #include <QTextOption>
+#include <QSplitter>
 
 #include "components/Header/HeaderBar.h"
 #include "components/Editor/CodeEditor.h"
 #include "components/Console/ConsoleView.h"
+#include "components/SymbolTable/SymbolTableView.h"
 
 #include "gals/Lexico.h"
 #include "gals/Sintatico.h"
@@ -32,15 +33,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   header = new HeaderBar(this);
   editor = new CodeEditor(this);
   console = new ConsoleView(this);
+  tableView = new SymbolTableView(this);
+  tableView->setMinimumWidth(280);
 
-  auto* splitter = new QSplitter(Qt::Vertical, this);
-  splitter->addWidget(editor);
-  splitter->addWidget(console);
-  splitter->setStretchFactor(0, 3);
-  splitter->setStretchFactor(1, 1);
+  auto* editorAndTable = new QSplitter(Qt::Horizontal, this);
+  editorAndTable->addWidget(editor);
+  editorAndTable->addWidget(tableView);
+  editorAndTable->setStretchFactor(0, 3);
+  editorAndTable->setStretchFactor(1, 2);
+
+  auto* mainSplitter = new QSplitter(Qt::Vertical, this);
+  mainSplitter->addWidget(editorAndTable);
+  mainSplitter->addWidget(console);
+  mainSplitter->setStretchFactor(0, 3);
+  mainSplitter->setStretchFactor(1, 1);
 
   vbox->addWidget(header);
-  vbox->addWidget(splitter, 1);
+  vbox->addWidget(mainSplitter, 1);
   setCentralWidget(central);
 
   statusBar()->showMessage(QStringLiteral("Pronto"));
@@ -51,7 +60,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   editor->setPlainText("print(\"Hello, World!\");");
 
-
   connect(editor, &QPlainTextEdit::cursorPositionChanged, this, [this]() {
     const auto cursor = editor->textCursor();
     const int line = cursor.blockNumber() + 1;
@@ -59,7 +67,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     cursorPosLabel->setText(QString("Linha %1, Coluna %2").arg(line).arg(col));
   });
 
-  // Contador de linha e coluna baseado no cursor/aonde o usuário está digitando no editor
+  // Atualiza rotulo inicial do cursor apos configurar o editor
   QMetaObject::invokeMethod(editor, [this]() {
     const auto cursor = editor->textCursor();
     const int line = cursor.blockNumber() + 1;
@@ -109,27 +117,36 @@ void MainWindow::applyDarkTheme() {
 void MainWindow::compileSource() {
   console->clear();
   editor->clearErrorMarkers();
-  console->appendLog(QStringLiteral("Iniciando análise sintática…"), QColor("#60a5fa")); // blue-400
+  tableView->clearSymbols();
+  console->appendLog(QStringLiteral("Iniciando analise sintetica..."), QColor("#60a5fa"));
 
   const QString source = editor->toPlainText();
   if (source.trimmed().isEmpty()) {
-    console->appendLog(QStringLiteral("Nenhum código para compilar."), QColor("#f87171")); // red-400
+    console->appendLog(QStringLiteral("Nenhum codigo para compilar."), QColor("#f87171"));
     statusBar()->showMessage(QStringLiteral("Falha: fonte vazia"));
     return;
   }
 
+  Lexico lex;
+  Sintatico sint;
+  Semantico sem;
+  sem.clearSymbolTable();
+
+  std::string srcStd = source.toStdString();
+  lex.setInput(srcStd.c_str());
+  sem.setSourceCode(srcStd);
+
+  auto updateTable = [&]() {
+    tableView->setSymbols(sem.symbolTable());
+  };
+
   try {
-    Lexico lex;
-    Sintatico sint;
-    Semantico sem;
-
-    std::string srcStd = source.toStdString();
-    lex.setInput(srcStd.c_str());
-
     sint.parse(&lex, &sem);
-    console->appendLog(QStringLiteral("Análise concluída com sucesso!"), QColor("#34d399"));
+    updateTable();
+    console->appendLog(QStringLiteral("Analise concluida com sucesso!"), QColor("#34d399"));
     statusBar()->showMessage(QStringLiteral("Compilado com sucesso"));
   } catch (const LexicalError& err) {
+    updateTable();
     const int pos = err.getPosition();
     int lineNo = -1, colNo = -1;
     if (pos >= 0) {
@@ -140,8 +157,8 @@ void MainWindow::compileSource() {
       colNo = tc.positionInBlock() + 1;
     }
     const auto msg = (lineNo > 0)
-      ? QString("Problema léxico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
-      : QString("Problema léxico: %1").arg(QString::fromUtf8(err.getMessage()));
+      ? QString("Problema lexico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema lexico: %1").arg(QString::fromUtf8(err.getMessage()));
     console->appendLog(msg, QColor("#f87171"));
     if (pos >= 0) {
       int start = pos;
@@ -153,9 +170,10 @@ void MainWindow::compileSource() {
       editor->showErrorAt(start, len);
     }
     statusBar()->showMessage((lineNo > 0)
-      ? QString("Erro léxico na linha %1, coluna %2").arg(lineNo).arg(colNo)
-      : QStringLiteral("Erro léxico"));
+      ? QString("Erro lexico na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro lexico"));
   } catch (const SyntacticError& err) {
+    updateTable();
     const int pos = err.getPosition();
     int lineNo = -1, colNo = -1;
     if (pos >= 0) {
@@ -166,8 +184,8 @@ void MainWindow::compileSource() {
       colNo = tc.positionInBlock() + 1;
     }
     const auto msg = (lineNo > 0)
-      ? QString("Problema sintático (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
-      : QString("Problema sintático: %1").arg(QString::fromUtf8(err.getMessage()));
+      ? QString("Problema sintetico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema sintetico: %1").arg(QString::fromUtf8(err.getMessage()));
     console->appendLog(msg, QColor("#f87171"));
     if (pos >= 0) {
       int start = pos;
@@ -179,9 +197,10 @@ void MainWindow::compileSource() {
       editor->showErrorAt(start, len);
     }
     statusBar()->showMessage((lineNo > 0)
-      ? QString("Erro sintático na linha %1, coluna %2").arg(lineNo).arg(colNo)
-      : QStringLiteral("Erro sintático"));
+      ? QString("Erro sintetico na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro sintetico"));
   } catch (const SemanticError& err) {
+    updateTable();
     const int pos = err.getPosition();
     int lineNo = -1, colNo = -1;
     if (pos >= 0) {
@@ -192,8 +211,8 @@ void MainWindow::compileSource() {
       colNo = tc.positionInBlock() + 1;
     }
     const auto msg = (lineNo > 0)
-      ? QString("Problema semântico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
-      : QString("Problema semântico: %1").arg(QString::fromUtf8(err.getMessage()));
+      ? QString("Problema semantico (linha %1, coluna %2): %3").arg(lineNo).arg(colNo).arg(QString::fromUtf8(err.getMessage()))
+      : QString("Problema semantico: %1").arg(QString::fromUtf8(err.getMessage()));
     console->appendLog(msg, QColor("#f87171"));
     if (pos >= 0) {
       int start = pos;
@@ -205,10 +224,11 @@ void MainWindow::compileSource() {
       editor->showErrorAt(start, len);
     }
     statusBar()->showMessage((lineNo > 0)
-      ? QString("Erro semântico na linha %1, coluna %2").arg(lineNo).arg(colNo)
-      : QStringLiteral("Erro semântico"));
+      ? QString("Erro semantico na linha %1, coluna %2").arg(lineNo).arg(colNo)
+      : QStringLiteral("Erro semantico"));
   } catch (...) {
-    console->appendLog(QStringLiteral("Erro desconhecido durante a compilação."), QColor("#f87171"));
+    updateTable();
+    console->appendLog(QStringLiteral("Erro desconhecido durante a compilacao."), QColor("#f87171"));
     statusBar()->showMessage(QStringLiteral("Erro desconhecido"));
   }
 }

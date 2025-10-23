@@ -7,6 +7,6 @@ export const theme = {
   border: '#3f3f46',
   blue: '#60a5fa',
   green: '#34d399',
+  yellow: '#facc15',
   red: '#f87171',
 } as const
-
