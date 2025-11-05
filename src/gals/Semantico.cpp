@@ -8,6 +8,7 @@
 #include "Semantico.h"
 #include "Constants.h"
 #include "../SemanticTable.cpp"
+#include "BipGenerator.h"
 
 using namespace std;
 
@@ -927,6 +928,10 @@ namespace
     SemanticTable::SymbolEntry entrada;
     entrada.name = Semantico::currentVariable.name;
     const bool possuiTipo = Semantico::currentVariable.type != Semantico::Type::NULLABLE;
+    const bool declaracaoValida = Semantico::currentVariable.hasDeclarationKeyword &&
+                                  possuiTipo &&
+                                  !Semantico::currentVariable.isFunction &&
+                                  !Semantico::currentVariable.isParameter;
     entrada.type = possuiTipo ? static_cast<SemanticTable::Types>(Semantico::currentVariable.type)
                               : SemanticTable::INT;
     entrada.initialized = Semantico::currentVariable.isInitialized;
@@ -947,6 +952,10 @@ namespace
     }
 
     semanticTable.commitStatement(entrada);
+    if (declaracaoValida)
+    {
+      BipGenerator::registerDeclaration(Semantico::currentVariable);
+    }
     semantico.resetCurrentVariable();
   }
 }
@@ -967,6 +976,7 @@ void Semantico::resetCurrentParameters()
 void Semantico::resetState()
 {
   semanticTable.reset();
+  BipGenerator::reset();
   resetScopeState();
   resetCurrentVariable();
   resetCurrentParameters();
@@ -1625,7 +1635,14 @@ vector<ExportedDiagnostic> snapshotDiagnostics()
   return exported;
 }
 
+std::string snapshotBipCode()
+{
+  return BipGenerator::lastCode();
+}
+
 void finalizeSemanticAnalysis()
 {
   semanticTable.closeAllScopes();
+  const std::string bipCode = BipGenerator::render();
+  BipGenerator::writeToFile(bipCode);
 }

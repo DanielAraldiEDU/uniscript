@@ -88,6 +88,7 @@ extern SemanticTable semanticTable;
 
 std::vector<ExportedSymbol> snapshotSymbolTable();
 std::vector<ExportedDiagnostic> snapshotDiagnostics();
+std::string snapshotBipCode();
 void finalizeSemanticAnalysis();
 
 #endif
