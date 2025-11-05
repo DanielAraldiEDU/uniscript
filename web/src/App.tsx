@@ -5,6 +5,7 @@ import { Editor } from './components/Editor'
 import { HeaderBar } from './components/HeaderBar'
 import { StatusBar } from './components/StatusBar'
 import { SymbolTable } from './components/SymbolTable'
+import { BipViewer } from './components/BipViewer'
 import { theme } from './theme'
 import { compileSource, posToLineCol, type CompileKind, type SymbolInfo, type DiagnosticInfo, type CompileResult } from './wasm/uniscript'
 
@@ -12,6 +13,7 @@ export default function App() {
   const [code, setCode] = useState<string>('print("Hello, World!");')
   const [logs, setLogs] = useState<LogItem[]>([])
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
+  const [bipCode, setBipCode] = useState<string>('')
   const [cursor, setCursor] = useState({ line: 1, col: 1 })
   const monacoRef = useRef<typeof MonacoNS | null>(null)
   const modelRef = useRef<MonacoNS.editor.ITextModel | null>(null)
@@ -36,16 +38,19 @@ export default function App() {
   async function handleCompile() {
     clearMarkers()
     setLogs([])
+    setBipCode('')
     addLog('Iniciando analise semantica...', theme.blue)
     const src = code.trim()
     if (!src) {
       addLog('Nenhum codigo para compilar.', theme.red)
       setSymbols([])
+      setBipCode('')
       return
     }
     try {
       const result = await compileSource(code)
       setSymbols(result.symbolTable)
+      setBipCode(result.ok ? result.bipCode : '')
 
       const diagnostics = result.diagnostics ?? []
       diagnostics.forEach((diag) => {
@@ -118,8 +123,13 @@ export default function App() {
               modelRef={modelRef}
             />
           </div>
-          <div style={{ flex: '0 0 340px', borderLeft: `1px solid ${theme.border}`, background: theme.panel }}>
-            <SymbolTable symbols={symbols} />
+          <div style={{ flex: '0 0 360px', borderLeft: `1px solid ${theme.border}`, background: theme.panel, display: 'flex', flexDirection: 'column', gap: 12, padding: 12, minWidth: 0 }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <SymbolTable symbols={symbols} />
+            </div>
+            <div style={{ flex: '0 0 200px', minHeight: 200 }}>
+              <BipViewer code={bipCode} />
+            </div>
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, borderTop: `1px solid ${theme.border}` }}>

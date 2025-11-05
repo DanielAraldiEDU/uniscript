@@ -84,10 +84,12 @@ static std::string diagnosticsToJson(const std::vector<ExportedDiagnostic>& diag
 }
 
 static std::string successResponse(const std::vector<ExportedSymbol>& symbols,
-                                   const std::vector<ExportedDiagnostic>& diagnostics) {
+                                   const std::vector<ExportedDiagnostic>& diagnostics,
+                                   const std::string& bipCode) {
   std::string json = "{\"ok\":true";
   json += ",\"symbolTable\":" + symbolTableToJson(symbols);
   json += ",\"diagnostics\":" + diagnosticsToJson(diagnostics);
+  json += ",\"bipCode\":\"" + jsonEscape(bipCode) + "\"";
   json += "}";
   return json;
 }
@@ -112,6 +114,7 @@ static std::string errorResponse(const char* kind, const char* message, int pos,
     json += "{\"severity\":\"error\",\"message\":\"" + jsonEscape(message) + "\",\"position\":" + std::to_string(pos) + ",\"length\":" + std::to_string(length <= 0 ? 1 : length) + "}";
   }
   json += "]";
+  json += ",\"bipCode\":\"\"";
   json += "}";
   return json;
 }
@@ -141,7 +144,8 @@ char* uniscript_compile(const char* src) {
     finalizeSemanticAnalysis();
     auto symbols = snapshotSymbolTable();
     auto diagnostics = snapshotDiagnostics();
-    std::string json = successResponse(symbols, diagnostics);
+    auto bipCode = snapshotBipCode();
+    std::string json = successResponse(symbols, diagnostics, bipCode);
     sem.resetState();
     return duplicateString(json);
   } catch (const LexicalError& e) {
