@@ -319,12 +319,14 @@ private:
 
     void tratarUsoExistente(const SymbolEntry &instrucao, int indiceSimbolo) {
         auto &simbolo = symbolTable[indiceSimbolo];
-        simbolo.used = true;
-
         const bool tentativaAtribuicao = instrucao.initialized || pendingExpressionType >= 0;
         if (tentativaAtribuicao && simbolo.isConstant) {
             addError("Não é permitido modificar constante: '" + instrucao.name + "'", instrucao.position, static_cast<int>(instrucao.name.size()));
             return;
+        }
+
+        if (!tentativaAtribuicao) {
+            simbolo.used = true;
         }
 
         if (pendingExpressionType >= 0) {
@@ -413,7 +415,7 @@ int const SemanticTable::expTable[4][4][9] =
 int const SemanticTable::atribTable[4][4] = {
     /*        INT                  FLOAT                STRING               BOOLEAN  */
     /*INT*/    { SemanticTable::OK,  SemanticTable::WAR,  SemanticTable::ERR,  SemanticTable::ERR },
-    /*FLOAT*/  { SemanticTable::WAR, SemanticTable::OK,   SemanticTable::ERR,  SemanticTable::ERR },
+    /*FLOAT*/  { SemanticTable::OK,  SemanticTable::OK,   SemanticTable::ERR,  SemanticTable::ERR },
     /*STRING*/ { SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::OK,   SemanticTable::ERR },
     /*BOOLEAN*/{ SemanticTable::ERR, SemanticTable::ERR,  SemanticTable::ERR,  SemanticTable::OK  }
 };
