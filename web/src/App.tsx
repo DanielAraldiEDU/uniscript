@@ -14,6 +14,7 @@ export default function App() {
   const [logs, setLogs] = useState<LogItem[]>([])
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [bipCode, setBipCode] = useState<string>('')
+  const [sidePanelTab, setSidePanelTab] = useState<'symbols' | 'bip'>('symbols')
   const [cursor, setCursor] = useState({ line: 1, col: 1 })
   const monacoRef = useRef<typeof MonacoNS | null>(null)
   const modelRef = useRef<MonacoNS.editor.ITextModel | null>(null)
@@ -123,12 +124,41 @@ export default function App() {
               modelRef={modelRef}
             />
           </div>
-          <div style={{ flex: '0 0 360px', borderLeft: `1px solid ${theme.border}`, background: theme.panel, display: 'flex', flexDirection: 'column', gap: 12, padding: 12, minWidth: 0 }}>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <SymbolTable symbols={symbols} />
+          <div style={{ flex: '0 0 880px', borderLeft: `1px solid ${theme.border}`, background: theme.panel, display: 'flex', flexDirection: 'column', minWidth: 880 }}>
+            <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}` }}>
+              <button
+                type="button"
+                onClick={() => setSidePanelTab('symbols')}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  background: sidePanelTab === 'symbols' ? '#27272a' : 'transparent',
+                  border: 'none',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  fontWeight: sidePanelTab === 'symbols' ? 600 : 500
+                }}
+              >
+                Tabela
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidePanelTab('bip')}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  background: sidePanelTab === 'bip' ? '#27272a' : 'transparent',
+                  border: 'none',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  fontWeight: sidePanelTab === 'bip' ? 600 : 500
+                }}
+              >
+                Código BIP
+              </button>
             </div>
-            <div style={{ flex: '0 0 200px', minHeight: 200 }}>
-              <BipViewer code={bipCode} />
+            <div style={{ flex: 1, padding: 12 }}>
+              {sidePanelTab === 'symbols' ? <SymbolTable symbols={symbols} /> : <BipViewer code={bipCode} />}
             </div>
           </div>
         </div>

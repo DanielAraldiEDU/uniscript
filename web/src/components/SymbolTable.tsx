@@ -60,7 +60,7 @@ export default function SymbolTable({ symbols = [] }: Props) {
                 left: 0,
                 zIndex: 20,
                 textAlign: 'center',
-                padding: '10px 12px',
+                padding: '8px 10px',
                 fontWeight: 600,
                 fontSize: 12,
                 color: theme.subtle,
@@ -77,7 +77,7 @@ export default function SymbolTable({ symbols = [] }: Props) {
                   key={column.key}
                   style={{
                     textAlign: 'left',
-                    padding: '10px 12px',
+                    padding: '8px 10px',
                     fontWeight: 600,
                     fontSize: 12,
                     color: theme.subtle,
@@ -85,7 +85,7 @@ export default function SymbolTable({ symbols = [] }: Props) {
                     top: 0,
                     background: theme.headerBg,
                     borderBottom: `2px solid ${theme.border}`,
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'normal'
                   }}
                 >
                   {column.label}
@@ -134,15 +134,15 @@ export default function SymbolTable({ symbols = [] }: Props) {
                   </td>
 
                   {columns.map((column) => (
-                    <td 
-                      key={column.key} 
-                      style={{ 
-                        padding: '10px 12px', 
-                        color: theme.text, 
-                        whiteSpace: 'nowrap',
-                        fontSize: 13
-                      }}
-                    >
+                  <td 
+                    key={column.key} 
+                    style={{ 
+                      padding: '8px 10px', 
+                      color: theme.text, 
+                      whiteSpace: 'normal',
+                      fontSize: 13
+                    }}
+                  >
                       {renderCell(column.key, symbol)}
                     </td>
                   ))}
