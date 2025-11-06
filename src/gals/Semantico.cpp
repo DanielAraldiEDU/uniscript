@@ -956,6 +956,14 @@ namespace
     {
       BipGenerator::registerDeclaration(Semantico::currentVariable);
     }
+    else if (!Semantico::currentVariable.value.empty())
+    {
+      auto symbolType = semanticTable.getSymbolType(entrada.name);
+      if (symbolType == SemanticTable::INT)
+      {
+        BipGenerator::registerAssignment(Semantico::currentVariable);
+      }
+    }
     semantico.resetCurrentVariable();
   }
 }

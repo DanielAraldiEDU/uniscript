@@ -19,6 +19,7 @@ namespace
   };
 
   std::vector<Entry> entries;
+  std::vector<std::string> instructions;
   std::string cachedCode;
   constexpr const char *OUTPUT_FILE = "output.bip";
 
@@ -124,6 +125,23 @@ namespace
     return literal;
   }
 
+  void emitScalarStore(const std::string &name, const std::string &literal)
+  {
+    instructions.push_back("LDI " + literal);
+    instructions.push_back("STO " + name);
+  }
+
+  void emitArrayStore(const std::string &name, const std::vector<std::string> &values)
+  {
+    for (std::size_t idx = 0; idx < values.size(); ++idx)
+    {
+      instructions.push_back("LDI " + std::to_string(static_cast<int>(idx)));
+      instructions.push_back("STO $indr");
+      instructions.push_back("LDI " + values[idx]);
+      instructions.push_back("STOV " + name);
+    }
+  }
+
   std::string buildCode()
   {
     std::ostringstream out;
@@ -170,7 +188,20 @@ namespace
       }
       out << "\n";
     }
-    out << ".text\n HLT\n";
+    out << ".text\n";
+    if (instructions.empty())
+    {
+      out << "  HLT\n";
+    }
+    else
+    {
+      for (const auto &instr : instructions)
+      {
+        out << "  " << instr << "\n";
+      }
+      out << "  HLT\n";
+    }
+
     return out.str();
   }
 }
@@ -182,6 +213,7 @@ namespace BipGenerator
   {
     entries.clear();
     cachedCode.clear();
+    instructions.clear();
   }
 
   void registerDeclaration(const Semantico::Variable &variable)
@@ -216,7 +248,41 @@ namespace BipGenerator
         }
       }
     }
+
+    if (!entry.literalValues.empty() && entry.isArray)
+    {
+      entry.elementCount = entry.literalValues.size();
+    }
+
+    if (entry.hasInitializer)
+    {
+      if (entry.isArray)
+      {
+        emitArrayStore(entry.name, entry.literalValues);
+      }
+      else if (!entry.literalValues.empty())
+      {
+        emitScalarStore(entry.name, entry.literalValues.front());
+      }
+    }
+
     entries.push_back(std::move(entry));
+  }
+
+  void registerAssignment(const Semantico::Variable &variable)
+  {
+    if (variable.name.empty())
+    {
+      return;
+    }
+    if (!variable.value.empty())
+    {
+      std::string literal = extractScalarLiteral(variable);
+      if (!literal.empty())
+      {
+        emitScalarStore(variable.name, literal);
+      }
+    }
   }
 
   std::string render()
