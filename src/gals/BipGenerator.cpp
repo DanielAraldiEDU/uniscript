@@ -841,20 +841,27 @@ namespace
     emitter.reset();
     if (expr.kind == Expr::Kind::Variable)
     {
-      out.push_back("IN");
+      out.push_back("LD $in_port");
       out.push_back("STO " + expr.value);
       return;
     }
     if (expr.kind == Expr::Kind::ArrayAccess && expr.index)
     {
-      std::string indexTemp = emitter.emit(*expr.index);
-      out.push_back("LD " + indexTemp);
-      out.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
-      out.push_back("IN");
-      out.push_back(std::string("STO ") + TEMP_VECTOR_VALUE);
-      out.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
+      if (expr.index->kind == Expr::Kind::Literal)
+      {
+        out.push_back("LDI " + expr.index->value);
+      }
+      else if (expr.index->kind == Expr::Kind::Variable)
+      {
+        out.push_back("LD " + expr.index->value);
+      }
+      else
+      {
+        std::string indexTemp = emitter.emit(*expr.index);
+        out.push_back("LD " + indexTemp);
+      }
       out.push_back("STO $indr");
-      out.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
+      out.push_back("LD $in_port");
       out.push_back("STOV " + expr.value);
       return;
     }

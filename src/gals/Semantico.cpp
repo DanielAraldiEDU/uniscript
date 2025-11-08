@@ -997,9 +997,7 @@ namespace
     Semantico::currentVariable.value.clear();
     Semantico::currentVariable.valuePositions.clear();
     Semantico::currentVariable.valueLengths.clear();
-    Semantico::currentVariable.value.push_back("0");
-    Semantico::currentVariable.valuePositions.push_back(-1);
-    Semantico::currentVariable.valueLengths.push_back(1);
+    Semantico::currentVariable.isInitialized = true;
     semanticTable.noteExprType(SemanticTable::INT);
   }
 
