@@ -1022,7 +1022,7 @@ namespace
     out << ".text\n";
     if (textInstructions.empty())
     {
-      out << "  HLT\n";
+      out << "  HLT 0\n";
     }
     else
     {
@@ -1030,7 +1030,7 @@ namespace
       {
         out << "  " << instr << "\n";
       }
-      out << "  HLT\n";
+      out << "  HLT 0\n";
     }
 
     return out.str();
