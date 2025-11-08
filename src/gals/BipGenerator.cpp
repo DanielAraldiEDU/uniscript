@@ -661,7 +661,7 @@ namespace
         instructions.push_back("LD " + indexTemp);
         instructions.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
         instructions.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
-        instructions.push_back("STO $INDR");
+        instructions.push_back("STO $indr");
         instructions.push_back("LDV " + expr.value);
         std::string temp = allocateTemp();
         instructions.push_back("STO " + temp);
@@ -744,7 +744,7 @@ namespace
     {
       return false;
     }
-    code.push_back("STO $INDR");
+    code.push_back("STO $indr");
     code.push_back("LDV " + expr.value);
     if (storeValue)
     {
@@ -853,7 +853,7 @@ namespace
       out.push_back("IN");
       out.push_back(std::string("STO ") + TEMP_VECTOR_VALUE);
       out.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
-      out.push_back("STO $INDR");
+      out.push_back("STO $indr");
       out.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
       out.push_back("STOV " + expr.value);
       return;
@@ -1090,7 +1090,7 @@ namespace BipGenerator
       for (std::size_t idx = 0; idx < count; ++idx)
       {
         instructions.push_back("LDI " + std::to_string(static_cast<int>(idx)));
-        instructions.push_back("STO $INDR");
+        instructions.push_back("STO $indr");
         instructions.push_back("LDI " + entries.back().literalValues[idx]);
         instructions.push_back("STOV " + entries.back().name);
       }
@@ -1157,7 +1157,7 @@ namespace BipGenerator
           }
           if (!direct.empty())
           {
-            direct.push_back("STO $INDR");
+            direct.push_back("STO $indr");
             direct.push_back("LDV " + expr.value);
             direct.push_back("STO " + parsed.targetName);
             emitAndStore(std::move(direct));
@@ -1203,7 +1203,7 @@ namespace BipGenerator
           code.push_back("LDI " + std::to_string(static_cast<int>(idx)));
           code.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
           code.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
-          code.push_back("STO $INDR");
+          code.push_back("STO $indr");
           code.push_back("LD " + elementTemp);
           code.push_back("STOV " + parsed.targetName);
         }
@@ -1232,7 +1232,7 @@ namespace BipGenerator
         code.push_back("LD " + indexTemp);
         code.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
         code.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
-        code.push_back("STO $INDR");
+        code.push_back("STO $indr");
         code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
         code.push_back("STOV " + parsed.targetName);
       }
