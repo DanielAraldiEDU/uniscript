@@ -870,11 +870,20 @@ namespace
 
   void generatePrintExpression(const Expr &expr, std::vector<std::string> &out)
   {
-    ExpressionEmitter emitter(out);
-    emitter.reset();
-    std::string valueTemp = emitter.emit(expr);
-    out.push_back("LD " + valueTemp);
-    out.push_back("OUT");
+    if(expr.kind == Expr::Kind::ArrayAccess){
+      out.push_back("LDI " + expr.index->value);
+      out.push_back("STO $indr");
+      out.push_back("LDV " + expr.value);
+      out.push_back("STO $out_port");
+      return;
+    } else if (expr.kind == Expr::Kind::Literal){
+      out.push_back("LDI " + expr.value);
+      out.push_back("STO $out_port");
+      return;
+    }
+   
+    out.push_back("LD " + expr.value);
+    out.push_back("STO $out_port");
   }
 
   bool isIntegerLiteral(const std::string &lexeme)
