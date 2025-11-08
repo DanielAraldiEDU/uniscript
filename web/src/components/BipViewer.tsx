@@ -59,27 +59,31 @@ export function BipViewer({ code }: Props) {
       >
         <span style={{ fontWeight: 600, fontSize: 15 }}>Código BIP</span>
       </div>
+
       <div
         style={{
           flex: 1,
           position: 'relative',
-          background: theme.panel
+          background: theme.panel,
+          overflow: 'auto' // 🔹 permite scroll no conteúdo todo
         }}
       >
         <div
           style={{
-            overflow: 'auto',
             padding: '12px 16px',
             fontFamily:
               'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
             fontSize: 13,
             color: theme.text,
             whiteSpace: 'pre',
-            background: theme.panel
+            background: theme.panel,
+            minHeight: '100%' // 🔹 garante que o botão não fique por cima do texto
           }}
         >
           {hasCode ? code : '// Nenhum código BIP gerado.'}
         </div>
+
+        {/* 🔹 botão agora no canto inferior direito */}
         <button
           type="button"
           onClick={handleCopy}
@@ -87,7 +91,7 @@ export function BipViewer({ code }: Props) {
           aria-label="Copiar código BIP"
           style={{
             position: 'absolute',
-            left: 16,
+            right: 16, // 👈 mudou de left para right
             bottom: 16,
             display: 'flex',
             alignItems: 'center',
@@ -100,7 +104,8 @@ export function BipViewer({ code }: Props) {
             cursor: hasCode ? 'pointer' : 'not-allowed',
             fontSize: 12,
             fontWeight: 500,
-            transition: 'background 0.2s ease, color 0.2s ease, transform 0.15s ease'
+            transition:
+              'background 0.2s ease, color 0.2s ease, transform 0.15s ease'
           }}
           onMouseEnter={(e) => {
             if (!hasCode) return
@@ -135,6 +140,7 @@ export function BipViewer({ code }: Props) {
           Copiar
         </button>
       </div>
+
       {copied && (
         <div
           style={{
