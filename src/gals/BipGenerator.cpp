@@ -699,12 +699,104 @@ namespace
     }
   };
 
-  bool isSimpleArrayAccess(const Expr &expr)
+  bool collectAddSubTerms(const Expr &expr, std::vector<std::pair<int, const Expr *>> &terms, int sign);
+
+  bool emitIndexValue(const Expr &expr, std::vector<std::string> &code, ExpressionEmitter &emitter)
+  {
+    auto emitDirect = [&](const Expr &node) -> bool {
+      if (node.kind == Expr::Kind::Literal)
+      {
+        code.push_back("LDI " + node.value);
+        return true;
+      }
+      if (node.kind == Expr::Kind::Variable)
+      {
+        code.push_back("LD " + node.value);
+        return true;
+      }
+      return false;
+    };
+
+    if (emitDirect(expr))
+    {
+      return true;
+    }
+
+    std::vector<std::pair<int, const Expr *>> terms;
+    if (collectAddSubTerms(expr, terms, 1) && !terms.empty())
+    {
+      bool onlySimple = true;
+      for (const auto &term : terms)
+      {
+        auto kind = term.second->kind;
+        if (kind != Expr::Kind::Literal && kind != Expr::Kind::Variable)
+        {
+          onlySimple = false;
+          break;
+        }
+      }
+      if (onlySimple)
+      {
+        int firstPositive = -1;
+        for (std::size_t i = 0; i < terms.size(); ++i)
+        {
+          if (terms[i].first > 0)
+          {
+            firstPositive = static_cast<int>(i);
+            break;
+          }
+        }
+        if (firstPositive >= 0)
+        {
+          const Expr *firstTerm = terms[firstPositive].second;
+          emitDirect(*firstTerm);
+        }
+        else
+        {
+          code.push_back("LDI 0");
+        }
+        for (std::size_t i = 0; i < terms.size(); ++i)
+        {
+          if (static_cast<int>(i) == firstPositive)
+            continue;
+          const Expr *termExpr = terms[i].second;
+          bool positive = terms[i].first > 0;
+          if (termExpr->kind == Expr::Kind::Literal)
+          {
+            code.push_back(std::string(positive ? "ADDI " : "SUBI ") + termExpr->value);
+          }
+          else
+          {
+            code.push_back(std::string(positive ? "ADD " : "SUB ") + termExpr->value);
+          }
+        }
+        if (firstPositive < 0)
+        {
+          // all terms were negativos: already handled in loop
+        }
+        return true;
+      }
+    }
+
+    std::string temp = emitter.emit(expr);
+    code.push_back("LD " + temp);
+    return true;
+  }
+
+  bool emitArrayValueInto(const Expr &expr, const std::string &destination, std::vector<std::string> &code, ExpressionEmitter &emitter)
   {
     if (expr.kind != Expr::Kind::ArrayAccess || !expr.index)
+    {
       return false;
-    auto kind = expr.index->kind;
-    return kind == Expr::Kind::Literal || kind == Expr::Kind::Variable;
+    }
+    if (!emitIndexValue(*expr.index, code, emitter))
+    {
+      return false;
+    }
+    code.push_back("STO $indr");
+    code.push_back("LDV " + expr.value);
+    code.push_back("STO " + destination);
+    return true;
   }
 
   bool collectAddSubTerms(const Expr &expr, std::vector<std::pair<int, const Expr *>> &terms, int sign)
@@ -717,40 +809,13 @@ namespace
       return collectAddSubTerms(*expr.right, terms, rightSign);
     }
 
-    if (expr.kind == Expr::Kind::Literal || expr.kind == Expr::Kind::Variable || isSimpleArrayAccess(expr))
+    if (expr.kind == Expr::Kind::Literal || expr.kind == Expr::Kind::Variable || expr.kind == Expr::Kind::ArrayAccess)
     {
       terms.push_back({sign, &expr});
       return true;
     }
 
     return false;
-  }
-
-  bool loadSimpleArrayInto(const Expr &expr, std::vector<std::string> &code, const std::string &temp, bool storeValue)
-  {
-    if (!isSimpleArrayAccess(expr))
-      return false;
-
-    const Expr *index = expr.index.get();
-    if (index->kind == Expr::Kind::Literal)
-    {
-      code.push_back("LDI " + index->value);
-    }
-    else if (index->kind == Expr::Kind::Variable)
-    {
-      code.push_back("LD " + index->value);
-    }
-    else
-    {
-      return false;
-    }
-    code.push_back("STO $indr");
-    code.push_back("LDV " + expr.value);
-    if (storeValue)
-    {
-      code.push_back("STO " + temp);
-    }
-    return true;
   }
 
   bool emitOptimizedAddSub(const Expr &expr, const std::string &target, std::vector<std::string> &code)
@@ -773,55 +838,71 @@ namespace
     if (firstIndex < 0)
       return false;
 
-    std::vector<std::pair<const Expr *, std::string>> arrayTemps;
+    ExpressionEmitter emitter(code);
+    emitter.reset();
+    const std::string running = TEMP_VECTOR_VALUE;
+    const std::string scratch = TEMP_VECTOR_VALUE_ALT;
 
-    auto loadInitial = [&](const Expr *node) -> bool {
+    auto storeTermInto = [&](const std::string &dest, const Expr *node) -> bool {
       if (node->kind == Expr::Kind::Literal)
       {
         code.push_back("LDI " + node->value);
+        code.push_back("STO " + dest);
         return true;
       }
       if (node->kind == Expr::Kind::Variable)
       {
         code.push_back("LD " + node->value);
+        code.push_back("STO " + dest);
         return true;
       }
-      if (isSimpleArrayAccess(*node))
+      if (node->kind == Expr::Kind::ArrayAccess)
       {
-        return loadSimpleArrayInto(*node, code, "", false);
+        return emitArrayValueInto(*node, dest, code, emitter);
       }
-      return false;
+      std::string temp = emitter.emit(*node);
+      code.push_back("LD " + temp);
+      code.push_back("STO " + dest);
+      return true;
     };
 
     auto applyTerm = [&](int sign, const Expr *node) -> bool {
       const bool positive = sign > 0;
       if (node->kind == Expr::Kind::Literal)
       {
+        code.push_back("LD " + running);
         code.push_back(std::string(positive ? "ADDI " : "SUBI ") + node->value);
+        code.push_back("STO " + running);
         return true;
       }
       if (node->kind == Expr::Kind::Variable)
       {
+        code.push_back("LD " + running);
         code.push_back(std::string(positive ? "ADD " : "SUB ") + node->value);
+        code.push_back("STO " + running);
         return true;
       }
-      if (isSimpleArrayAccess(*node))
+      if (!storeTermInto(scratch, node))
       {
-        code.push_back(std::string("STO ") + TEMP_VECTOR_VALUE);
-        if (!loadSimpleArrayInto(*node, code, TEMP_VECTOR_VALUE_ALT, true))
-        {
-          return false;
-        }
-        code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
-        code.push_back(std::string(positive ? "ADD " : "SUB ") + std::string(TEMP_VECTOR_VALUE_ALT));
-        return true;
+        return false;
       }
-      return false;
+      code.push_back("LD " + running);
+      code.push_back(std::string(positive ? "ADD " : "SUB ") + scratch);
+      code.push_back("STO " + running);
+      return true;
     };
 
-    if (!loadInitial(terms[firstIndex].second))
+    if (firstIndex >= 0)
     {
-      return false;
+      if (!storeTermInto(running, terms[firstIndex].second))
+      {
+        return false;
+      }
+    }
+    else
+    {
+      code.push_back("LDI 0");
+      code.push_back("STO " + running);
     }
 
     for (std::size_t i = 0; i < terms.size(); ++i)
@@ -831,6 +912,8 @@ namespace
       if (!applyTerm(terms[i].first, terms[i].second))
         return false;
     }
+
+    code.push_back("LD " + running);
     code.push_back("STO " + target);
     return true;
   }
@@ -870,20 +953,52 @@ namespace
 
   void generatePrintExpression(const Expr &expr, std::vector<std::string> &out)
   {
-    if(expr.kind == Expr::Kind::ArrayAccess){
-      out.push_back("LDI " + expr.index->value);
+    ExpressionEmitter emitter(out);
+    emitter.reset();
+
+    auto emitArrayIndex = [&](const Expr &index) {
+      if (index.kind == Expr::Kind::Literal)
+      {
+        out.push_back("LDI " + index.value);
+        return;
+      }
+      if (index.kind == Expr::Kind::Variable)
+      {
+        out.push_back("LD " + index.value);
+        return;
+      }
+      std::string indexTemp = emitter.emit(index);
+      out.push_back("LD " + indexTemp);
+    };
+
+    if (expr.kind == Expr::Kind::ArrayAccess)
+    {
+      if (!expr.index)
+      {
+        throw std::runtime_error("Acesso a vetor sem índice na impressão");
+      }
+      emitArrayIndex(*expr.index);
       out.push_back("STO $indr");
       out.push_back("LDV " + expr.value);
       out.push_back("STO $out_port");
       return;
-    } else if (expr.kind == Expr::Kind::Literal){
+    }
+
+    if (expr.kind == Expr::Kind::Literal)
+    {
       out.push_back("LDI " + expr.value);
       out.push_back("STO $out_port");
       return;
     }
-   
-    out.push_back("LD " + expr.value);
-    out.push_back("STO $out_port");
+
+    if (expr.kind == Expr::Kind::Variable)
+    {
+      out.push_back("LD " + expr.value);
+      out.push_back("STO $out_port");
+      return;
+    }
+
+    throw std::runtime_error("Expressão inválida para impressão");
   }
 
   bool isIntegerLiteral(const std::string &lexeme)
@@ -992,7 +1107,6 @@ namespace
   {
     instructions.push_back("LDI " + literal);
     instructions.push_back("STO " + name);
-    instructions.push_back("STO " + name);
   }
 
   std::string buildCode()
@@ -1099,17 +1213,23 @@ namespace BipGenerator
     }
 
     entries.push_back(std::move(entry));
-    if (entries.back().isArray && !entries.back().literalValues.empty())
+    Entry &current = entries.back();
+    if (current.isArray && !current.literalValues.empty())
     {
-      const std::size_t count = entries.back().literalValues.size();
-      entries.back().elementCount = count;
+      const std::size_t count = current.literalValues.size();
+      current.elementCount = count;
       for (std::size_t idx = 0; idx < count; ++idx)
       {
         instructions.push_back("LDI " + std::to_string(static_cast<int>(idx)));
         instructions.push_back("STO $indr");
-        instructions.push_back("LDI " + entries.back().literalValues[idx]);
-        instructions.push_back("STOV " + entries.back().name);
+        instructions.push_back("LDI " + current.literalValues[idx]);
+        instructions.push_back("STOV " + current.name);
       }
+    }
+    else if (!current.isArray && current.hasInitializer && !current.literalValues.empty())
+    {
+      instructions.push_back("LDI " + current.literalValues.front());
+      instructions.push_back("STO " + current.name);
     }
   }
 
