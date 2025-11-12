@@ -10,6 +10,7 @@
 #include <vector>
 #include <algorithm>
 #include <limits>
+#include <stdio.h>
 
 namespace
 {
@@ -44,6 +45,43 @@ namespace
     while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])))
       --end;
     return text.substr(start, end - start);
+  }
+
+  // Converte binário para decimal
+  int binaryToDecimal(const std::string &binary)
+  {
+    int decimal = 0;
+    for (char c : binary)
+    {
+      if (c == '0' || c == '1')
+      {
+        decimal = decimal * 2 + (c - '0');
+      }
+    }
+    return decimal;
+  }
+
+  // Verifica se string é um número binário
+  bool isBinaryLiteral(const std::string &str)
+  {
+    if (str.empty())
+      return false;
+    for (char c : str)
+    {
+      if (c != '0' && c != '1')
+        return false;
+    }
+    return true;
+  }
+
+  // Converte literal (pode ser binário) para decimal
+  std::string convertLiteralToDecimal(const std::string &literal)
+  {
+    if (isBinaryLiteral(literal))
+    {
+      return std::to_string(binaryToDecimal(literal));
+    }
+    return literal;
   }
 
   std::size_t findMatchingParenthesis(const std::string &src, std::size_t openPos)
@@ -81,7 +119,7 @@ namespace
       Binary
     } kind;
     std::string value;
-    char op = '\0';
+    std::string op; // Mudado de char para string para suportar operadores de 2 caracteres
     ExprPtr left;
     ExprPtr right;
     ExprPtr index;
@@ -90,7 +128,8 @@ namespace
     {
       auto node = std::make_unique<Expr>();
       node->kind = Kind::Literal;
-      node->value = std::move(literal);
+      // Converte binário para decimal se necessário
+      node->value = convertLiteralToDecimal(literal);
       return node;
     }
 
@@ -111,11 +150,11 @@ namespace
       return node;
     }
 
-    static ExprPtr makeBinary(char operation, ExprPtr lhs, ExprPtr rhs)
+    static ExprPtr makeBinary(std::string operation, ExprPtr lhs, ExprPtr rhs)
     {
       auto node = std::make_unique<Expr>();
       node->kind = Kind::Binary;
-      node->op = operation;
+      node->op = std::move(operation);
       node->left = std::move(lhs);
       node->right = std::move(rhs);
       return node;
@@ -157,6 +196,17 @@ namespace
       if (std::isdigit(static_cast<unsigned char>(c)))
         return number();
 
+      // Verifica operadores de 2 caracteres
+      if (pos + 1 < length)
+      {
+        std::string twoChar = text.substr(pos, 2);
+        if (twoChar == "<<" || twoChar == ">>")
+        {
+          pos += 2;
+          return Token{Token::Type::Operator, twoChar};
+        }
+      }
+
       ++pos;
       switch (c)
       {
@@ -165,6 +215,10 @@ namespace
       case '&':
       case '|':
       case '^':
+      case '~':
+      case '*':
+      case '/':
+      case '%':
         return Token{Token::Type::Operator, std::string(1, c)};
       case '[':
         return Token{Token::Type::LBracket, "["};
@@ -227,7 +281,7 @@ namespace
       auto expr = parseFactor();
       while (matchOperator())
       {
-        char op = previous.lexeme[0];
+        std::string op = previous.lexeme;
         auto rhs = parseFactor();
         expr = Expr::makeBinary(op, std::move(expr), std::move(rhs));
       }
@@ -601,23 +655,21 @@ namespace
     return true;
   }
 
-  std::string opcodeForOperator(char op)
+  std::string opcodeForOperator(const std::string &op)
   {
-    switch (op)
-    {
-    case '+':
-      return "ADD";
-    case '-':
-      return "SUB";
-    case '&':
-      return "AND";
-    case '|':
-      return "OR";
-    case '^':
-      return "XOR";
-    default:
-      throw std::runtime_error(std::string("Operador não suportado: ") + op);
-    }
+    if (op == "+") return "ADD";
+    if (op == "-") return "SUB";
+    if (op == "*") return "MUL";  // Assumindo que existe
+    if (op == "/") return "DIV";  // Assumindo que existe
+    if (op == "%") return "MOD";  // Assumindo que existe
+    if (op == "&") return "AND";
+    if (op == "|") return "OR";
+    if (op == "^") return "XOR";
+    if (op == "<<") return "SLL";
+    if (op == ">>") return "SRL";
+    if (op == "~") return "NOT";
+    
+    throw std::runtime_error(std::string("Operador não suportado: ") + op);
   }
 
   class ExpressionEmitter
@@ -640,7 +692,8 @@ namespace
       case Expr::Kind::Literal:
       {
         std::string temp = allocateTemp();
-        instructions.push_back("LDI " + expr.value);
+        std::string decimalValue = convertLiteralToDecimal(expr.value);
+        instructions.push_back("LDI " + decimalValue);
         instructions.push_back("STO " + temp);
         return temp;
       }
@@ -673,8 +726,63 @@ namespace
         {
           throw std::runtime_error("Expressão binária inválida");
         }
+        
+        // Para operadores bit a bit e shifts, precisamos tratar de forma especial
+        if (expr.op == "<<" || expr.op == ">>")
+        {
+          // Para shifts: primeiro operando no ACC, segundo como operando imediato
+          std::string leftTemp = emit(*expr.left);
+          
+          // Se o operando direito for literal, podemos usar diretamente
+          if (expr.right->kind == Expr::Kind::Literal)
+          {
+            instructions.push_back("LD " + leftTemp);
+            std::string decimalValue = convertLiteralToDecimal(expr.right->value);
+            instructions.push_back(opcodeForOperator(expr.op) + " " + decimalValue);
+            std::string temp = allocateTemp();
+            instructions.push_back("STO " + temp);
+            return temp;
+          }
+          else
+          {
+            // Se não for literal, precisamos avaliar e usar como operando
+            std::string rightTemp = emit(*expr.right);
+            instructions.push_back("LD " + leftTemp);
+            instructions.push_back(opcodeForOperator(expr.op) + " " + rightTemp);
+            std::string temp = allocateTemp();
+            instructions.push_back("STO " + temp);
+            return temp;
+          }
+        }
+        
+        // Para outros operadores binários
         std::string rightTemp = emit(*expr.right);
         std::string leftTemp = emit(*expr.left);
+        
+        // Operações bit a bit usam instruções com operando de memória ou imediato
+        if (expr.op == "&" || expr.op == "|" || expr.op == "^")
+        {
+          // Se o operando direito for literal, usar versão imediata
+          if (expr.right->kind == Expr::Kind::Literal)
+          {
+            instructions.push_back("LD " + leftTemp);
+            std::string decimalValue = convertLiteralToDecimal(expr.right->value);
+            instructions.push_back(opcodeForOperator(expr.op) + "I " + decimalValue);
+            std::string temp = allocateTemp();
+            instructions.push_back("STO " + temp);
+            return temp;
+          }
+          else
+          {
+            instructions.push_back("LD " + leftTemp);
+            instructions.push_back(opcodeForOperator(expr.op) + " " + rightTemp);
+            std::string temp = allocateTemp();
+            instructions.push_back("STO " + temp);
+            return temp;
+          }
+        }
+        
+        // Operadores aritméticos padrão
         instructions.push_back("LD " + leftTemp);
         instructions.push_back(opcodeForOperator(expr.op) + " " + rightTemp);
         std::string temp = allocateTemp();
@@ -706,7 +814,8 @@ namespace
     auto emitDirect = [&](const Expr &node) -> bool {
       if (node.kind == Expr::Kind::Literal)
       {
-        code.push_back("LDI " + node.value);
+        std::string decimalValue = convertLiteralToDecimal(node.value);
+        code.push_back("LDI " + decimalValue);
         return true;
       }
       if (node.kind == Expr::Kind::Variable)
@@ -763,7 +872,8 @@ namespace
           bool positive = terms[i].first > 0;
           if (termExpr->kind == Expr::Kind::Literal)
           {
-            code.push_back(std::string(positive ? "ADDI " : "SUBI ") + termExpr->value);
+            std::string decimalValue = convertLiteralToDecimal(termExpr->value);
+            code.push_back(std::string(positive ? "ADDI " : "SUBI ") + decimalValue);
           }
           else
           {
@@ -801,11 +911,11 @@ namespace
 
   bool collectAddSubTerms(const Expr &expr, std::vector<std::pair<int, const Expr *>> &terms, int sign)
   {
-    if (expr.kind == Expr::Kind::Binary && (expr.op == '+' || expr.op == '-'))
+    if (expr.kind == Expr::Kind::Binary && (expr.op == "+" || expr.op == "-"))
     {
       if (!collectAddSubTerms(*expr.left, terms, sign))
         return false;
-      int rightSign = expr.op == '+' ? sign : -sign;
+      int rightSign = expr.op == "+" ? sign : -sign;
       return collectAddSubTerms(*expr.right, terms, rightSign);
     }
 
@@ -846,7 +956,8 @@ namespace
     auto storeTermInto = [&](const std::string &dest, const Expr *node) -> bool {
       if (node->kind == Expr::Kind::Literal)
       {
-        code.push_back("LDI " + node->value);
+        std::string decimalValue = convertLiteralToDecimal(node->value);
+        code.push_back("LDI " + decimalValue);
         code.push_back("STO " + dest);
         return true;
       }
@@ -871,7 +982,8 @@ namespace
       if (node->kind == Expr::Kind::Literal)
       {
         code.push_back("LD " + running);
-        code.push_back(std::string(positive ? "ADDI " : "SUBI ") + node->value);
+        std::string decimalValue = convertLiteralToDecimal(node->value);
+        code.push_back(std::string(positive ? "ADDI " : "SUBI ") + decimalValue);
         code.push_back("STO " + running);
         return true;
       }
@@ -932,7 +1044,8 @@ namespace
     {
       if (expr.index->kind == Expr::Kind::Literal)
       {
-        out.push_back("LDI " + expr.index->value);
+        std::string decimalValue = convertLiteralToDecimal(expr.index->value);
+        out.push_back("LDI " + decimalValue);
       }
       else if (expr.index->kind == Expr::Kind::Variable)
       {
@@ -959,7 +1072,8 @@ namespace
     auto emitArrayIndex = [&](const Expr &index) {
       if (index.kind == Expr::Kind::Literal)
       {
-        out.push_back("LDI " + index.value);
+        std::string decimalValue = convertLiteralToDecimal(index.value);
+        out.push_back("LDI " + decimalValue);
         return;
       }
       if (index.kind == Expr::Kind::Variable)
@@ -986,7 +1100,8 @@ namespace
 
     if (expr.kind == Expr::Kind::Literal)
     {
-      out.push_back("LDI " + expr.value);
+      std::string decimalValue = convertLiteralToDecimal(expr.value);
+      out.push_back("LDI " + decimalValue);
       out.push_back("STO $out_port");
       return;
     }
@@ -1045,6 +1160,10 @@ namespace
       {
         ++count;
       }
+      else if (isBinaryLiteral(token))
+      {
+        ++count;
+      }
     }
 
     if (count == 0)
@@ -1067,6 +1186,10 @@ namespace
       if (isIntegerLiteral(token))
       {
         values.push_back(token);
+      }
+      else if (isBinaryLiteral(token))
+      {
+        values.push_back(std::to_string(binaryToDecimal(token)));
       }
     }
     return values;
@@ -1094,6 +1217,15 @@ namespace
         literal = token;
         continue;
       }
+      if (isBinaryLiteral(token))
+      {
+        if (!literal.empty())
+        {
+          return "";
+        }
+        literal = std::to_string(binaryToDecimal(token));
+        continue;
+      }
       if (token == "," || token == ";" || token == "=")
       {
         continue;
@@ -1105,7 +1237,8 @@ namespace
 
   void emitScalarStore(const std::string &name, const std::string &literal)
   {
-    instructions.push_back("LDI " + literal);
+    std::string decimalValue = convertLiteralToDecimal(literal);
+    instructions.push_back("LDI " + decimalValue);
     instructions.push_back("STO " + name);
   }
 
@@ -1285,7 +1418,8 @@ namespace BipGenerator
           std::vector<std::string> direct;
           if (expr.index->kind == Expr::Kind::Literal)
           {
-            direct.push_back("LDI " + expr.index->value);
+            std::string decimalValue = convertLiteralToDecimal(expr.index->value);
+            direct.push_back("LDI " + decimalValue);
           }
           else if (expr.index->kind == Expr::Kind::Variable)
           {
@@ -1303,7 +1437,8 @@ namespace BipGenerator
 
         if (expr.kind == Expr::Kind::Literal)
         {
-          code.push_back("LDI " + expr.value);
+          std::string decimalValue = convertLiteralToDecimal(expr.value);
+          code.push_back("LDI " + decimalValue);
           code.push_back("STO " + parsed.targetName);
           emitAndStore(std::move(code));
           return;
@@ -1315,6 +1450,74 @@ namespace BipGenerator
           emitAndStore(std::move(code));
           return;
         }
+        
+        // Otimização para operações binárias simples (sem temporários desnecessários)
+        if (expr.kind == Expr::Kind::Binary && expr.left && expr.right)
+        {
+          // Caso especial: operação binária simples (variável op literal/variável)
+          bool leftIsSimple = (expr.left->kind == Expr::Kind::Variable || expr.left->kind == Expr::Kind::Literal);
+          bool rightIsSimple = (expr.right->kind == Expr::Kind::Variable || expr.right->kind == Expr::Kind::Literal);
+          
+          if (leftIsSimple && rightIsSimple)
+          {
+            // Carrega operando esquerdo
+            if (expr.left->kind == Expr::Kind::Literal)
+            {
+              std::string decimalValue = convertLiteralToDecimal(expr.left->value);
+              code.push_back("LDI " + decimalValue);
+            }
+            else
+            {
+              code.push_back("LD " + expr.left->value);
+            }
+            
+            // Aplica operação com operando direito
+            if (expr.op == "<<" || expr.op == ">>")
+            {
+              // Shifts
+              if (expr.right->kind == Expr::Kind::Literal)
+              {
+                std::string decimalValue = convertLiteralToDecimal(expr.right->value);
+                code.push_back(opcodeForOperator(expr.op) + " " + decimalValue);
+              }
+              else
+              {
+                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+              }
+            }
+            else if (expr.op == "&" || expr.op == "|" || expr.op == "^")
+            {
+              // Operações bit a bit
+              if (expr.right->kind == Expr::Kind::Literal)
+              {
+                std::string decimalValue = convertLiteralToDecimal(expr.right->value);
+                code.push_back(opcodeForOperator(expr.op) + "I " + decimalValue);
+              }
+              else
+              {
+                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+              }
+            }
+            else
+            {
+              // Operações aritméticas
+              if (expr.right->kind == Expr::Kind::Literal)
+              {
+                std::string decimalValue = convertLiteralToDecimal(expr.right->value);
+                code.push_back(opcodeForOperator(expr.op) + "I " + decimalValue);
+              }
+              else
+              {
+                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+              }
+            }
+            
+            code.push_back("STO " + parsed.targetName);
+            emitAndStore(std::move(code));
+            return;
+          }
+        }
+        
         if (emitOptimizedAddSub(expr, parsed.targetName, code))
         {
           emitAndStore(std::move(code));
