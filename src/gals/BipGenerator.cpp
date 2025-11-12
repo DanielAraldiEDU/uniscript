@@ -659,9 +659,9 @@ namespace
   {
     if (op == "+") return "ADD";
     if (op == "-") return "SUB";
-    if (op == "*") return "MUL";  // Assumindo que existe
-    if (op == "/") return "DIV";  // Assumindo que existe
-    if (op == "%") return "MOD";  // Assumindo que existe
+    if (op == "*") return "MUL"; 
+    if (op == "/") return "DIV"; 
+    if (op == "%") return "MOD";
     if (op == "&") return "AND";
     if (op == "|") return "OR";
     if (op == "^") return "XOR";
@@ -1327,12 +1327,16 @@ namespace BipGenerator
     entry.name = variable.name;
     entry.isArray = variable.isArray;
     entry.elementCount = entry.isArray ? inferArrayLength(variable) : 1;
+    
+    bool hasSimpleLiteral = false;
+    
     if (variable.isInitialized)
     {
       if (entry.isArray)
       {
         entry.literalValues = extractArrayLiterals(variable);
         entry.hasInitializer = !entry.literalValues.empty();
+        hasSimpleLiteral = entry.hasInitializer;
       }
       else
       {
@@ -1341,12 +1345,15 @@ namespace BipGenerator
         {
           entry.literalValues.push_back(std::move(literal));
           entry.hasInitializer = true;
+          hasSimpleLiteral = true;
         }
       }
     }
 
     entries.push_back(std::move(entry));
     Entry &current = entries.back();
+    
+    // Inicialização de arrays com valores literais
     if (current.isArray && !current.literalValues.empty())
     {
       const std::size_t count = current.literalValues.size();
@@ -1359,10 +1366,17 @@ namespace BipGenerator
         instructions.push_back("STOV " + current.name);
       }
     }
+    // Inicialização de variável escalar com literal simples
     else if (!current.isArray && current.hasInitializer && !current.literalValues.empty())
     {
       instructions.push_back("LDI " + current.literalValues.front());
       instructions.push_back("STO " + current.name);
+    }
+    // Se tem inicialização mas não é literal simples, tenta processar como atribuição
+    else if (!current.isArray && variable.isInitialized && !hasSimpleLiteral)
+    {
+      // Tem inicialização com expressão complexa, processa como atribuição
+      registerAssignment(variable);
     }
   }
 
