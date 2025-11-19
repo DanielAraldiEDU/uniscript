@@ -32,6 +32,7 @@ export interface CompileResult {
   length?: number
   symbolTable: SymbolInfo[]
   diagnostics: DiagnosticInfo[]
+  bipCode: string
 }
 
 export async function compileSource(code: string): Promise<CompileResult> {
@@ -66,6 +67,7 @@ function normalizeCompileResult(raw: any): CompileResult {
   const pos = typeof raw?.pos === 'number' ? raw.pos : undefined
   const symbolTable = Array.isArray(raw?.symbolTable) ? raw.symbolTable.map(normalizeSymbolInfo) : []
   const diagnostics = Array.isArray(raw?.diagnostics) ? raw.diagnostics.map(normalizeDiagnosticInfo) : []
+  const bipCode = typeof raw?.bipCode === 'string' ? raw.bipCode : ''
 
   return {
     ok: Boolean(raw?.ok),
@@ -74,7 +76,8 @@ function normalizeCompileResult(raw: any): CompileResult {
     pos,
     length: typeof raw?.length === 'number' ? raw.length : undefined,
     symbolTable,
-    diagnostics
+    diagnostics,
+    bipCode
   }
 }
 

@@ -4,10 +4,12 @@
 #include <cctype>
 #include <utility>
 #include <optional>
+#include <limits>
 
 #include "Semantico.h"
 #include "Constants.h"
 #include "../SemanticTable.cpp"
+#include "BipGenerator.h"
 
 using namespace std;
 
@@ -69,6 +71,76 @@ namespace
 {
 
   void finalizarInstrucao(Semantico &semantico);
+  std::string trimString(const std::string &text)
+  {
+    std::size_t start = 0;
+    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
+      ++start;
+    std::size_t end = text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])))
+      --end;
+    return text.substr(start, end - start);
+  }
+
+  bool extractCallArgumentAt(const std::string &keyword, std::size_t referencePos, std::string &argument)
+  {
+    const std::string &src = Semantico::sourceCode;
+    if (referencePos >= src.size())
+    {
+      return false;
+    }
+
+    std::size_t openPos = std::string::npos;
+    std::size_t pos = referencePos;
+    while (pos > 0)
+    {
+      char c = src[pos - 1];
+      if (c == '(')
+      {
+        openPos = pos - 1;
+        break;
+      }
+      if (c == ';' || c == '\n')
+      {
+        break;
+      }
+      --pos;
+    }
+    if (openPos == std::string::npos)
+      return false;
+
+    std::size_t keywordEnd = openPos;
+    while (keywordEnd > 0 && std::isspace(static_cast<unsigned char>(src[keywordEnd - 1])))
+      --keywordEnd;
+    std::size_t keywordBegin = keywordEnd;
+    while (keywordBegin > 0 && std::isalpha(static_cast<unsigned char>(src[keywordBegin - 1])))
+      --keywordBegin;
+    if (keywordBegin == keywordEnd)
+      return false;
+    if (src.substr(keywordBegin, keywordEnd - keywordBegin) != keyword)
+      return false;
+
+    int depth = 0;
+    for (std::size_t idx = openPos; idx < src.size(); ++idx)
+    {
+      char c = src[idx];
+      if (c == '(')
+      {
+        ++depth;
+      }
+      else if (c == ')')
+      {
+        --depth;
+        if (depth == 0)
+        {
+          std::size_t closePos = idx;
+          argument = trimString(src.substr(openPos + 1, closePos - openPos - 1));
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   enum class ScopeKind
   {
@@ -441,6 +513,12 @@ namespace
     op.length = token ? static_cast<int>(token->getLexeme().size()) : 1;
     op.lexeme = token ? token->getLexeme() : "";
     ctx.pendingOperator = op;
+    if (token && !Semantico::currentVariable.isFunction)
+    {
+      Semantico::currentVariable.value.push_back(token->getLexeme());
+      Semantico::currentVariable.valuePositions.push_back(token->getPosition());
+      Semantico::currentVariable.valueLengths.push_back(static_cast<int>(token->getLexeme().size()));
+    }
   }
 
   void registerUnaryOperator(UnaryKind kind, const Token *token)
@@ -668,10 +746,16 @@ namespace
     }
     if (lexema == "[")
     {
+      Semantico::currentVariable.value.push_back(lexema);
+      Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
+      Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
       return;
     }
     if (lexema == "]")
     {
+      Semantico::currentVariable.value.push_back(lexema);
+      Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
+      Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
       finalizeIndexExpression(token);
       return;
     }
@@ -910,15 +994,10 @@ namespace
 
   void executarLeitura()
   {
-    string valor;
-    if (!(cin >> valor))
-      return;
     Semantico::currentVariable.value.clear();
     Semantico::currentVariable.valuePositions.clear();
     Semantico::currentVariable.valueLengths.clear();
-    Semantico::currentVariable.value.push_back(valor);
-    Semantico::currentVariable.valuePositions.push_back(-1);
-    Semantico::currentVariable.valueLengths.push_back(static_cast<int>(valor.size()));
+    Semantico::currentVariable.isInitialized = true;
     semanticTable.noteExprType(SemanticTable::INT);
   }
 
@@ -927,6 +1006,10 @@ namespace
     SemanticTable::SymbolEntry entrada;
     entrada.name = Semantico::currentVariable.name;
     const bool possuiTipo = Semantico::currentVariable.type != Semantico::Type::NULLABLE;
+    const bool declaracaoValida = Semantico::currentVariable.hasDeclarationKeyword &&
+                                  possuiTipo &&
+                                  !Semantico::currentVariable.isFunction &&
+                                  !Semantico::currentVariable.isParameter;
     entrada.type = possuiTipo ? static_cast<SemanticTable::Types>(Semantico::currentVariable.type)
                               : SemanticTable::INT;
     entrada.initialized = Semantico::currentVariable.isInitialized;
@@ -947,6 +1030,18 @@ namespace
     }
 
     semanticTable.commitStatement(entrada);
+    if (declaracaoValida)
+    {
+      BipGenerator::registerDeclaration(Semantico::currentVariable);
+    }
+    else if (!Semantico::currentVariable.value.empty())
+    {
+      auto symbolType = semanticTable.getSymbolType(entrada.name);
+      if (symbolType == SemanticTable::INT)
+      {
+        BipGenerator::registerAssignment(Semantico::currentVariable);
+      }
+    }
     semantico.resetCurrentVariable();
   }
 }
@@ -967,6 +1062,7 @@ void Semantico::resetCurrentParameters()
 void Semantico::resetState()
 {
   semanticTable.reset();
+  BipGenerator::reset();
   resetScopeState();
   resetCurrentVariable();
   resetCurrentParameters();
@@ -1210,11 +1306,17 @@ void Semantico::executeAction(int action, const Token *token)
     break;
   case 17:
     // PRINT
+  {
+    int bestPos = std::numeric_limits<int>::max();
     for (size_t idx = 0; idx < Semantico::currentVariable.value.size(); ++idx)
     {
       const auto &value = Semantico::currentVariable.value[idx];
       const int valuePos = idx < Semantico::currentVariable.valuePositions.size() ? Semantico::currentVariable.valuePositions[idx] : -1;
       const int valueLen = idx < Semantico::currentVariable.valueLengths.size() ? Semantico::currentVariable.valueLengths[idx] : static_cast<int>(value.size());
+      if (valuePos >= 0 && valuePos < bestPos)
+      {
+        bestPos = valuePos;
+      }
       if (!value.empty() && (std::isalpha(static_cast<unsigned char>(value.front())) || value.front() == '_'))
       {
         if (value != "true" && value != "false")
@@ -1222,12 +1324,20 @@ void Semantico::executeAction(int action, const Token *token)
           semanticTable.markUseIfDeclared(value, valuePos, valueLen);
         }
       }
-      cout << value << " ";
+    }
+    if (bestPos != std::numeric_limits<int>::max())
+    {
+      std::string argument;
+      if (extractCallArgumentAt("print", static_cast<std::size_t>(bestPos), argument) && !argument.empty())
+      {
+        BipGenerator::registerPrintStatement(static_cast<std::size_t>(bestPos), argument);
+      }
     }
     Semantico::currentVariable.isUsed = true;
     Semantico::currentVariable.name.clear();
     Semantico::currentVariable.hasDeclarationKeyword = false;
     break;
+  }
   case 18:
     // READ
     executarLeitura();
@@ -1625,7 +1735,14 @@ vector<ExportedDiagnostic> snapshotDiagnostics()
   return exported;
 }
 
+std::string snapshotBipCode()
+{
+  return BipGenerator::lastCode();
+}
+
 void finalizeSemanticAnalysis()
 {
   semanticTable.closeAllScopes();
+  const std::string bipCode = BipGenerator::render();
+  BipGenerator::writeToFile(bipCode);
 }

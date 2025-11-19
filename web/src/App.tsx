@@ -5,6 +5,7 @@ import { Editor } from './components/Editor'
 import { HeaderBar } from './components/HeaderBar'
 import { StatusBar } from './components/StatusBar'
 import { SymbolTable } from './components/SymbolTable'
+import { BipViewer } from './components/BipViewer'
 import { theme } from './theme'
 import { compileSource, posToLineCol, type CompileKind, type SymbolInfo, type DiagnosticInfo, type CompileResult } from './wasm/uniscript'
 
@@ -12,6 +13,8 @@ export default function App() {
   const [code, setCode] = useState<string>('print("Hello, World!");')
   const [logs, setLogs] = useState<LogItem[]>([])
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
+  const [bipCode, setBipCode] = useState<string>('')
+  const [sidePanelTab, setSidePanelTab] = useState<'symbols' | 'bip'>('symbols')
   const [cursor, setCursor] = useState({ line: 1, col: 1 })
   const monacoRef = useRef<typeof MonacoNS | null>(null)
   const modelRef = useRef<MonacoNS.editor.ITextModel | null>(null)
@@ -36,16 +39,19 @@ export default function App() {
   async function handleCompile() {
     clearMarkers()
     setLogs([])
+    setBipCode('')
     addLog('Iniciando analise semantica...', theme.blue)
     const src = code.trim()
     if (!src) {
       addLog('Nenhum codigo para compilar.', theme.red)
       setSymbols([])
+      setBipCode('')
       return
     }
     try {
       const result = await compileSource(code)
       setSymbols(result.symbolTable)
+      setBipCode(result.ok ? result.bipCode : '')
 
       const diagnostics = result.diagnostics ?? []
       diagnostics.forEach((diag) => {
@@ -118,8 +124,42 @@ export default function App() {
               modelRef={modelRef}
             />
           </div>
-          <div style={{ flex: '0 0 340px', borderLeft: `1px solid ${theme.border}`, background: theme.panel }}>
-            <SymbolTable symbols={symbols} />
+          <div style={{ flex: '0 0 880px', borderLeft: `1px solid ${theme.border}`, background: theme.panel, display: 'flex', flexDirection: 'column', minWidth: 880 }}>
+            <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}` }}>
+              <button
+                type="button"
+                onClick={() => setSidePanelTab('symbols')}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  background: sidePanelTab === 'symbols' ? '#27272a' : 'transparent',
+                  border: 'none',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  fontWeight: sidePanelTab === 'symbols' ? 600 : 500
+                }}
+              >
+                Tabela
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidePanelTab('bip')}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  background: sidePanelTab === 'bip' ? '#27272a' : 'transparent',
+                  border: 'none',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  fontWeight: sidePanelTab === 'bip' ? 600 : 500
+                }}
+              >
+                Código BIP
+              </button>
+            </div>
+            <div style={{ flex: 1, padding: 12 }}>
+              {sidePanelTab === 'symbols' ? <SymbolTable symbols={symbols} /> : <BipViewer code={bipCode} />}
+            </div>
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, borderTop: `1px solid ${theme.border}` }}>
