@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdio.h>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -47,6 +48,7 @@ namespace
   };
   std::vector<AliasEntry> aliasEntries;
   std::unordered_map<std::string, int> aliasCounters;
+  std::unordered_set<std::string> seenPrints;
 
   std::string trim(const std::string &text)
   {
@@ -378,8 +380,6 @@ namespace
     for (const auto &entry : aliasEntries)
     {
       if (entry.original != name)
-        continue;
-      if (entry.position > static_cast<int>(refPos))
         continue;
       if (entry.scopeDepth > refDepth)
         continue;
@@ -1433,7 +1433,10 @@ namespace
       return;
     }
 
-    throw std::runtime_error("Expressão inválida para impressão");
+    // Demais expressões: avalia e imprime o resultado temporário
+    std::string temp = emitter.emit(expr);
+    out.push_back("LD " + temp);
+    out.push_back("STO $out_port");
   }
 
   struct RelationalParts
@@ -2342,6 +2345,7 @@ namespace BipGenerator
     labelCounter = 1;
     aliasEntries.clear();
     aliasCounters.clear();
+    seenPrints.clear();
   }
 
   void registerDeclaration(const Semantico::Variable &variable)
@@ -2674,16 +2678,32 @@ namespace BipGenerator
 
   void registerPrintStatement(std::size_t position, const std::string &expression)
   {
-    for (const auto &entry : statementInstructions)
-    {
-      if (entry.first == position)
-        return;
-    }
+    const std::string key = std::to_string(position) + ":" + expression;
+    if (seenPrints.count(key))
+      return;
+    seenPrints.insert(key);
     try
     {
       std::vector<std::string> code;
       auto expr = parseExpressionString(expression);
       generatePrintExpression(*expr, code, position);
+      auto sameBlock = [&](const std::vector<std::string> &other) {
+        if (other.size() != code.size())
+          return false;
+        for (std::size_t i = 0; i < code.size(); ++i)
+        {
+          if (code[i] != other[i])
+            return false;
+        }
+        return true;
+      };
+      for (const auto &entry : statementInstructions)
+      {
+        if (entry.first == position && sameBlock(entry.second))
+        {
+          return;
+        }
+      }
       statementInstructions.emplace_back(position, std::move(code));
     }
     catch (const std::exception &)
@@ -2720,6 +2740,34 @@ namespace BipGenerator
       if (argument.empty())
         continue;
       registerReadStatement(i, argument);
+      i = close;
+    }
+  }
+
+  void scanPrintStatements()
+  {
+    const std::string &src = Semantico::sourceCode;
+    const std::string keyword = "print";
+    const std::size_t len = src.size();
+
+    for (std::size_t i = 0; i + keyword.size() < len; ++i)
+    {
+      if (src.compare(i, keyword.size(), keyword) != 0)
+        continue;
+      if (i > 0 && (std::isalnum(static_cast<unsigned char>(src[i - 1])) || src[i - 1] == '_'))
+        continue;
+      std::size_t j = i + keyword.size();
+      while (j < len && std::isspace(static_cast<unsigned char>(src[j])))
+        ++j;
+      if (j >= len || src[j] != '(')
+        continue;
+      std::size_t close = findMatchingParenthesis(src, j);
+      if (close == std::string::npos)
+        continue;
+      std::string argument = trim(src.substr(j + 1, close - j - 1));
+      if (argument.empty())
+        continue;
+      registerPrintStatement(i, argument);
       i = close;
     }
   }
