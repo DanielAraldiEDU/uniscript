@@ -311,6 +311,78 @@ namespace
     return depth;
   }
 
+  void ensureArrayAssignmentsEmitted()
+  {
+    const std::string &src = Semantico::sourceCode;
+    if (src.empty())
+      return;
+
+    auto isIdentChar = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+
+    std::size_t pos = 0;
+    while (true)
+    {
+      std::size_t bracketPos = src.find('[', pos);
+      if (bracketPos == std::string::npos)
+        break;
+
+      std::size_t idEnd = bracketPos;
+      std::size_t idStart = idEnd;
+      while (idStart > 0 && isIdentChar(src[idStart - 1]))
+        --idStart;
+      if (idStart == idEnd)
+      {
+        pos = bracketPos + 1;
+        continue;
+      }
+
+      std::string name = src.substr(idStart, idEnd - idStart);
+
+      std::size_t closeBracket = src.find(']', bracketPos);
+      if (closeBracket == std::string::npos)
+      {
+        pos = bracketPos + 1;
+        continue;
+      }
+
+      std::size_t eqPos = src.find('=', closeBracket);
+      while (eqPos != std::string::npos && eqPos + 1 < src.size() && src[eqPos + 1] == '=')
+      {
+        eqPos = src.find('=', eqPos + 2);
+      }
+      if (eqPos == std::string::npos)
+      {
+        pos = closeBracket + 1;
+        continue;
+      }
+
+      std::size_t colonPos = src.find(':', idEnd);
+      if (colonPos != std::string::npos && colonPos < eqPos)
+      {
+        pos = closeBracket + 1;
+        continue;
+      }
+
+      std::size_t semiPos = src.find(';', eqPos);
+      if (semiPos == std::string::npos)
+      {
+        pos = closeBracket + 1;
+        continue;
+      }
+
+      Semantico::Variable var;
+      var.name = name;
+      var.isArray = true;
+      var.isInitialized = true;
+      var.position = static_cast<int>(idStart);
+      registerAssignment(var);
+
+      pos = semiPos + 1;
+    }
+  }
+
+  void ensureArrayAssignmentsEmitted();
+
   bool isInsideForHeader(std::size_t position)
   {
     const std::string &src = Semantico::sourceCode;
@@ -926,6 +998,111 @@ namespace
     return !lhsOut.empty() && !rhsOut.empty();
   }
 
+  bool quickSliceAroundPosition(const Semantico::Variable &variable, std::string &lhsOut, std::string &rhsOut, std::size_t &statementStart)
+  {
+    const std::string &src = Semantico::sourceCode;
+    if (src.empty())
+      return false;
+    // tenta âncora próxima da posição conhecida
+    std::size_t anchor = (variable.position >= 0 && static_cast<std::size_t>(variable.position) < src.size())
+                             ? static_cast<std::size_t>(variable.position)
+                             : 0;
+
+    auto trySliceAt = [&](std::size_t namePos) -> bool {
+      std::size_t eq = src.find('=', namePos);
+      while (eq != std::string::npos)
+      {
+        if (!(eq + 1 < src.size() && src[eq + 1] == '='))
+          break;
+        eq = src.find('=', eq + 2);
+      }
+      if (eq == std::string::npos)
+        return false;
+      std::size_t semi = src.find(';', eq);
+      if (semi == std::string::npos)
+        return false;
+      std::size_t lhsEnd = eq;
+      while (lhsEnd > 0 && std::isspace(static_cast<unsigned char>(src[lhsEnd - 1])))
+        --lhsEnd;
+      std::size_t lhsStart = lhsEnd;
+      while (lhsStart > 0)
+      {
+        char c = src[lhsStart - 1];
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '[' || c == ']')
+        {
+          --lhsStart;
+          continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(c)))
+        {
+          --lhsStart;
+          continue;
+        }
+        break;
+      }
+      lhsOut = trim(src.substr(lhsStart, lhsEnd - lhsStart));
+      rhsOut = trim(src.substr(eq + 1, semi - eq - 1));
+      statementStart = lhsStart;
+      return !lhsOut.empty() && !rhsOut.empty();
+    };
+
+    if (trySliceAt(anchor))
+      return true;
+
+    // fallback: busca por atribuição usando o nome do vetor mais próximo do topo
+    if (!variable.name.empty())
+    {
+      std::size_t pos = 0;
+      auto isIdent = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+      while (true)
+      {
+        pos = src.find(variable.name, pos);
+        if (pos == std::string::npos)
+          break;
+        if ((pos > 0 && isIdent(src[pos - 1])) || (pos + variable.name.size() < src.size() && isIdent(src[pos + variable.name.size()])))
+        {
+          pos += variable.name.size();
+          continue;
+        }
+
+        std::size_t afterName = pos + variable.name.size();
+        // se for atribuição de vetor, exige '[' logo após nome (ignorando espaços)
+        std::size_t scan = afterName;
+        while (scan < src.size() && std::isspace(static_cast<unsigned char>(src[scan])))
+          ++scan;
+        if (variable.isArray)
+        {
+          if (scan >= src.size() || src[scan] != '[')
+          {
+            pos += variable.name.size();
+            continue; // não é acesso a elemento
+          }
+        }
+
+        // evita pegar declaração: se houver ':' antes do '=' mais próximo, pula
+        std::size_t nextEq = src.find('=', scan);
+        if (nextEq == std::string::npos)
+        {
+          pos += variable.name.size();
+          continue;
+        }
+        std::size_t colonPos = src.find(':', afterName);
+        if (colonPos != std::string::npos && colonPos < nextEq)
+        {
+          pos += variable.name.size();
+          continue; // é declaração
+        }
+
+        if (trySliceAt(pos))
+          return true;
+
+        pos += variable.name.size();
+      }
+    }
+
+    return false;
+  }
+
   ExprPtr parseExpressionString(const std::string &exprString)
   {
     Parser parser(exprString);
@@ -943,7 +1120,10 @@ namespace
     std::string rhs;
     std::size_t statementStart = 0;
     if (!extractAssignmentSlices(variable, lhs, rhs, statementStart))
-      return false;
+    {
+      if (!quickSliceAroundPosition(variable, lhs, rhs, statementStart))
+        return false;
+    }
 
     if (lhs.empty() || rhs.empty())
       return false;
@@ -2356,6 +2536,7 @@ namespace
     if (controlFlowGenerated)
       return;
     controlFlowGenerated = true;
+    ensureArrayAssignmentsEmitted();
     ControlFlowGenerator parser(Semantico::sourceCode);
     parser.parse();
   }
