@@ -375,7 +375,7 @@ namespace
       var.isArray = true;
       var.isInitialized = true;
       var.position = static_cast<int>(idStart);
-      registerAssignment(var);
+      BipGenerator::registerAssignment(var);
 
       pos = semiPos + 1;
     }
