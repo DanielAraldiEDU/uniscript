@@ -1034,7 +1034,7 @@ namespace
     {
       BipGenerator::registerDeclaration(Semantico::currentVariable);
     }
-    else if (!Semantico::currentVariable.value.empty())
+    else if (!Semantico::currentVariable.value.empty() || Semantico::currentVariable.isArray)
     {
       auto symbolType = semanticTable.getSymbolType(entrada.name);
       if (symbolType == SemanticTable::INT)

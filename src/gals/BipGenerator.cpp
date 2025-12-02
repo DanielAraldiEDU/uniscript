@@ -16,8 +16,10 @@
 
 namespace
 {
-  constexpr const int TEMP_BASE_ADDRESS = 1100;
-  constexpr const int TEMP_MAX_ADDRESS = 2047;
+  // Reservamos temporários para expressões bem abaixo do limite de 1023 do BIP
+  // e longe dos registradores auxiliares 1000/1001/1002.
+  constexpr const int TEMP_BASE_ADDRESS = 900;
+  constexpr const int TEMP_MAX_ADDRESS = 999;
   constexpr const char *TEMP_VECTOR_INDEX = "1002";
   constexpr const char *TEMP_VECTOR_VALUE = "1000";
   constexpr const char *TEMP_VECTOR_VALUE_ALT = "1001";
@@ -733,8 +735,39 @@ namespace
         start = static_cast<std::size_t>(best);
       }
     }
+
+    auto fallbackFind = [&]() -> std::size_t {
+      if (variable.name.empty())
+        return std::string::npos;
+      std::size_t pos = 0;
+      while (true)
+      {
+        pos = src.find(variable.name, pos);
+        if (pos == std::string::npos)
+          return std::string::npos;
+        // garante que não está no meio de outro identificador
+        auto isIdent = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+        if ((pos > 0 && isIdent(src[pos - 1])) || (pos + variable.name.size() < src.size() && isIdent(src[pos + variable.name.size()])))
+        {
+          pos += variable.name.size();
+          continue;
+        }
+        std::size_t eq = src.find('=', pos + variable.name.size());
+        if (eq == std::string::npos)
+          return std::string::npos;
+        std::size_t semi = src.find(';', eq);
+        if (semi == std::string::npos)
+          return std::string::npos;
+        return pos;
+      }
+    };
+
     if (start == std::string::npos || start >= src.size())
-      return false;
+    {
+      start = fallbackFind();
+      if (start == std::string::npos || start >= src.size())
+        return false;
+    }
 
     while (start > 0 && std::isspace(static_cast<unsigned char>(src[start - 1])))
       --start;
@@ -1777,11 +1810,15 @@ namespace
     return literal;
   }
 
-  void emitScalarStore(const std::string &name, const std::string &literal)
+  void emitScalarStore(const std::string &name, const std::string &literal, std::size_t position)
   {
     std::string decimalValue = convertLiteralToDecimal(literal);
-    instructions.push_back("LDI " + decimalValue);
-    instructions.push_back("STO " + name);
+    std::vector<std::string> code;
+    code.push_back("LDI " + decimalValue);
+    code.push_back("STO " + name);
+    // Se a posição não for válida, empurra para o final para não bagunçar fluxo
+    const std::size_t safePos = position == std::string::npos ? std::numeric_limits<std::size_t>::max() - 1 : position;
+    statementInstructions.emplace_back(safePos, std::move(code));
   }
 
   bool extractConditionAt(const std::string &src, std::size_t keywordPos, std::size_t keywordLen, std::string &condition, std::size_t &condOpen, std::size_t &condClose)
@@ -1914,11 +1951,69 @@ namespace
       }
 
       auto rhsExpr = parseExpressionString(rhsText);
+      const std::string targetAlias = resolveAlias(targetName, refPos);
+
+      // Caminho otimizado: atualizações simples sem temporários extras.
+      auto isSimple = [](const Expr &expr) {
+        return expr.kind == Expr::Kind::Literal || expr.kind == Expr::Kind::Variable;
+      };
+      auto loadSimple = [&](const Expr &expr) -> void {
+        if (expr.kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(expr.value);
+          code.push_back("LDI " + decimalValue);
+        }
+        else if (expr.kind == Expr::Kind::Variable)
+        {
+          const std::string name = resolveAlias(expr.value, refPos);
+          code.push_back("LD " + name);
+        }
+      };
+
+      if (!targetIsArray)
+      {
+        if (rhsExpr->kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(rhsExpr->value);
+          code.push_back("LDI " + decimalValue);
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+        if (rhsExpr->kind == Expr::Kind::Variable)
+        {
+          const std::string srcName = resolveAlias(rhsExpr->value, refPos);
+          code.push_back("LD " + srcName);
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+        if (rhsExpr->kind == Expr::Kind::Binary && rhsExpr->left && rhsExpr->right &&
+            (rhsExpr->op == "+" || rhsExpr->op == "-") &&
+            isSimple(*rhsExpr->left) && isSimple(*rhsExpr->right))
+        {
+          loadSimple(*rhsExpr->left);
+
+          const Expr &rightNode = *rhsExpr->right;
+          if (rightNode.kind == Expr::Kind::Literal)
+          {
+            std::string decimalValue = convertLiteralToDecimal(rightNode.value);
+            code.push_back(std::string(rhsExpr->op == "+" ? "ADDI " : "SUBI ") + decimalValue);
+          }
+          else
+          {
+            const std::string name = resolveAlias(rightNode.value, refPos);
+            code.push_back(std::string(rhsExpr->op == "+" ? "ADD " : "SUB ") + name);
+          }
+
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+      }
+
+      // Caminho geral (usa temporários)
       ExpressionEmitter emitter(code, refPos);
       emitter.reset();
       std::string valueTemp = emitter.emit(*rhsExpr);
 
-      const std::string targetAlias = resolveAlias(targetName, refPos);
       if (targetIsArray && targetIndex)
       {
         std::string idxTemp = emitter.emit(*targetIndex);
@@ -2141,8 +2236,11 @@ namespace
       }
 
       parseRange(bodyOpen + 1, bodyClose);
+      // Mantém o salto de repetição colado ao fechamento do bloco,
+      // seguido imediatamente pelo rótulo de saída, para evitar que
+      // instruções após o while caiam entre o JMP e o label.
       addStatementBlock(bodyClose, {"JMP " + startLabel});
-      addStatementBlock(bodyClose + 1, {endLabel + ":"});
+      addStatementBlock(bodyClose, {endLabel + ":"});
       pos = bodyClose + 1;
       return true;
     }
@@ -2392,24 +2490,31 @@ namespace BipGenerator
     entries.push_back(std::move(entry));
     Entry &current = entries.back();
     
-    // Inicialização de arrays com valores literais
+    // Inicialização de arrays com valores literais (inserida na posição da declaração)
     if (current.isArray && !current.literalValues.empty())
     {
       const std::size_t count = current.literalValues.size();
       current.elementCount = count;
+      std::vector<std::string> code;
       for (std::size_t idx = 0; idx < count; ++idx)
       {
-        instructions.push_back("LDI " + std::to_string(static_cast<int>(idx)));
-        instructions.push_back("STO $indr");
-        instructions.push_back("LDI " + current.literalValues[idx]);
-        instructions.push_back("STOV " + current.name);
+        code.push_back("LDI " + std::to_string(static_cast<int>(idx)));
+        code.push_back("STO $indr");
+        code.push_back("LDI " + current.literalValues[idx]);
+        code.push_back("STOV " + current.name);
+      }
+      if (!code.empty())
+      {
+        statementInstructions.emplace_back(declPos, std::move(code));
       }
     }
     // Inicialização de variável escalar com literal simples
     else if (!current.isArray && current.hasInitializer && !current.literalValues.empty())
     {
-      instructions.push_back("LDI " + current.literalValues.front());
-      instructions.push_back("STO " + current.name);
+      std::vector<std::string> code;
+      code.push_back("LDI " + current.literalValues.front());
+      code.push_back("STO " + current.name);
+      statementInstructions.emplace_back(declPos, std::move(code));
     }
     // Se tem inicialização mas não é literal simples, tenta processar como atribuição
     else if (!current.isArray && variable.isInitialized && !hasSimpleLiteral)
@@ -2438,7 +2543,7 @@ namespace BipGenerator
           {
             const std::size_t refPos = variable.position >= 0 ? static_cast<std::size_t>(variable.position) : 0;
             const std::string alias = resolveAlias(variable.name, refPos);
-            emitScalarStore(alias, literal);
+            emitScalarStore(alias, literal, refPos);
           }
         }
         return;
@@ -2453,7 +2558,7 @@ namespace BipGenerator
         {
           const std::size_t refPos = variable.position >= 0 ? static_cast<std::size_t>(variable.position) : 0;
           const std::string alias = resolveAlias(variable.name, refPos);
-          emitScalarStore(alias, literal);
+          emitScalarStore(alias, literal, refPos);
         }
       }
       return;
