@@ -575,9 +575,12 @@ namespace
 
   std::string makeAlias(const std::string &name, const std::string &functionName, int scopeDepth)
   {
-    const std::string base = mangleName(name, functionName);
-    const std::string key = base + "#d" + std::to_string(scopeDepth);
-    int count = ++aliasCounters[key];
+    std::string base = mangleName(name, functionName);
+    if (scopeDepth > 0)
+    {
+      base += "_s" + std::to_string(scopeDepth);
+    }
+    int count = ++aliasCounters[base];
     if (count == 1)
       return base;
     return base + "_" + std::to_string(count);
@@ -650,7 +653,7 @@ namespace
       int paramDepth = 1;
       for (auto &param : fn.params)
       {
-        const std::string alias = mangleName(param.name, fn.lowerName);
+        const std::string alias = makeAlias(param.name, fn.lowerName, 0);
         param.alias = alias;
         parameterAliasMap[fn.lowerName + ":" + param.name] = alias;
         aliasEntries.push_back({param.name, alias, fn.lowerName, paramDepth, static_cast<int>(param.position)});
@@ -2082,7 +2085,7 @@ namespace
     return false;
   }
 
-  std::string branchOpcodeFor(const std::string &op, bool invert)
+  std::string branchOpcodeFor(const std::string &op, bool invert, bool preferStrictLess)
   {
     const std::string normalized = (op == "===") ? "==" : (op == "!==") ? "!=" : op;
     if (!invert)
@@ -2103,7 +2106,7 @@ namespace
     else
     {
       if (normalized == "<")
-        return "BGE";
+        return preferStrictLess ? "BGT" : "BGE";
       if (normalized == ">")
         return "BLE";
       if (normalized == "<=")
@@ -2118,7 +2121,7 @@ namespace
     throw std::runtime_error("Operador relacional não suportado: " + op);
   }
 
-  std::vector<std::string> emitRelationalJump(const std::string &conditionText, const std::string &targetLabel, bool invert, std::size_t refPos)
+  std::vector<std::string> emitRelationalJump(const std::string &conditionText, const std::string &targetLabel, bool invert, std::size_t refPos, bool preferStrictLess = false)
   {
     RelationalParts parts;
     if (!splitRelationalExpression(conditionText, parts))
@@ -2167,7 +2170,7 @@ namespace
 
       code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
       code.push_back(std::string("SUB ") + TEMP_VECTOR_VALUE_ALT);
-      const std::string opcode = branchOpcodeFor(parts.op, invert);
+      const std::string opcode = branchOpcodeFor(parts.op, invert, preferStrictLess);
       code.push_back(opcode + " " + targetLabel);
     }
     catch (const std::exception &)
@@ -2830,7 +2833,7 @@ namespace
       addStatementBlock(header.condStart, {startLabel + ":"});
       if (!header.conditionText.empty())
       {
-        auto condInstr = emitRelationalJump(header.conditionText, endLabel, true, header.condStart);
+        auto condInstr = emitRelationalJump(header.conditionText, endLabel, true, header.condStart, true);
         if (!condInstr.empty())
         {
           addStatementBlock(header.condStart + 1, std::move(condInstr));
