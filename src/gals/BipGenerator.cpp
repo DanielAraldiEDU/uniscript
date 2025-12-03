@@ -23,6 +23,7 @@ namespace
   constexpr const char *TEMP_VECTOR_INDEX = "1002";
   constexpr const char *TEMP_VECTOR_VALUE = "1000";
   constexpr const char *TEMP_VECTOR_VALUE_ALT = "1001";
+  constexpr const std::size_t DEFAULT_ARRAY_LENGTH = 16;
 
   struct Entry
   {
@@ -310,78 +311,6 @@ namespace
     }
     return depth;
   }
-
-  void ensureArrayAssignmentsEmitted()
-  {
-    const std::string &src = Semantico::sourceCode;
-    if (src.empty())
-      return;
-
-    auto isIdentChar = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
-
-    std::size_t pos = 0;
-    while (true)
-    {
-      std::size_t bracketPos = src.find('[', pos);
-      if (bracketPos == std::string::npos)
-        break;
-
-      std::size_t idEnd = bracketPos;
-      std::size_t idStart = idEnd;
-      while (idStart > 0 && isIdentChar(src[idStart - 1]))
-        --idStart;
-      if (idStart == idEnd)
-      {
-        pos = bracketPos + 1;
-        continue;
-      }
-
-      std::string name = src.substr(idStart, idEnd - idStart);
-
-      std::size_t closeBracket = src.find(']', bracketPos);
-      if (closeBracket == std::string::npos)
-      {
-        pos = bracketPos + 1;
-        continue;
-      }
-
-      std::size_t eqPos = src.find('=', closeBracket);
-      while (eqPos != std::string::npos && eqPos + 1 < src.size() && src[eqPos + 1] == '=')
-      {
-        eqPos = src.find('=', eqPos + 2);
-      }
-      if (eqPos == std::string::npos)
-      {
-        pos = closeBracket + 1;
-        continue;
-      }
-
-      std::size_t colonPos = src.find(':', idEnd);
-      if (colonPos != std::string::npos && colonPos < eqPos)
-      {
-        pos = closeBracket + 1;
-        continue;
-      }
-
-      std::size_t semiPos = src.find(';', eqPos);
-      if (semiPos == std::string::npos)
-      {
-        pos = closeBracket + 1;
-        continue;
-      }
-
-      Semantico::Variable var;
-      var.name = name;
-      var.isArray = true;
-      var.isInitialized = true;
-      var.position = static_cast<int>(idStart);
-      BipGenerator::registerAssignment(var);
-
-      pos = semiPos + 1;
-    }
-  }
-
-  void ensureArrayAssignmentsEmitted();
 
   bool isInsideForHeader(std::size_t position)
   {
@@ -1905,7 +1834,7 @@ namespace
 
     if (!variable.literalIsArray)
     {
-      return 1;
+      return DEFAULT_ARRAY_LENGTH;
     }
 
     std::size_t count = 0;
@@ -2536,7 +2465,6 @@ namespace
     if (controlFlowGenerated)
       return;
     controlFlowGenerated = true;
-    ensureArrayAssignmentsEmitted();
     ControlFlowGenerator parser(Semantico::sourceCode);
     parser.parse();
   }
