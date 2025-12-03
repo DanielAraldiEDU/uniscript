@@ -35,23 +35,65 @@ namespace
   };
 
   std::vector<Entry> entries;
-  std::vector<std::string> instructions;
   std::vector<std::pair<std::size_t, std::vector<std::string>>> statementInstructions;
   std::string cachedCode;
   constexpr const char *OUTPUT_FILE = "output.bip";
   static bool readStatementsScanned = false;
   static bool controlFlowGenerated = false;
   static std::size_t labelCounter = 1;
+  static std::unordered_set<std::string> functionsWithReturn;
   struct AliasEntry
   {
     std::string original;
     std::string alias;
+    std::string functionName;
     int scopeDepth = 0;
     int position = -1;
   };
   std::vector<AliasEntry> aliasEntries;
   std::unordered_map<std::string, int> aliasCounters;
   std::unordered_set<std::string> seenPrints;
+  struct ParameterInfo
+  {
+    std::string name;
+    Semantico::Type type = Semantico::Type::INT;
+    bool isArray = false;
+    std::size_t position = 0;
+    std::string alias;
+  };
+
+  struct FunctionInfo
+  {
+    std::string name;
+    std::string lowerName;
+    std::string label;
+    Semantico::Type returnType = Semantico::Type::VOID;
+    std::size_t headerStart = 0;
+    std::size_t bodyStart = 0;
+    std::size_t bodyEnd = 0;
+    std::vector<ParameterInfo> params;
+  };
+
+  std::vector<FunctionInfo> functions;
+  static bool functionsParsed = false;
+  static bool parametersRegistered = false;
+  std::unordered_map<std::string, std::string> parameterAliasMap;
+
+  std::string toLower(std::string text)
+  {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return text;
+  }
+
+  std::string toUpper(std::string text)
+  {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    return text;
+  }
+
+  void ensureFunctionsParsed();
+  void ensureParametersRegistered();
+  std::vector<std::string> splitTopLevel(const std::string &source, char separator);
 
   std::string trim(const std::string &text)
   {
@@ -221,6 +263,22 @@ namespace
     return std::string::npos;
   }
 
+  Semantico::Type parseTypeName(const std::string &typeToken)
+  {
+    const std::string lowered = toLower(typeToken);
+    if (lowered == "int")
+      return Semantico::Type::INT;
+    if (lowered == "float")
+      return Semantico::Type::FLOAT;
+    if (lowered == "string")
+      return Semantico::Type::STRING;
+    if (lowered == "bool" || lowered == "boolean")
+      return Semantico::Type::BOOLEAN;
+    if (lowered == "void")
+      return Semantico::Type::VOID;
+    return Semantico::Type::NULLABLE;
+  }
+
   bool isKeywordAt(const std::string &src, std::size_t pos, const std::string &keyword)
   {
     const std::size_t len = src.size();
@@ -235,6 +293,162 @@ namespace
     if (after < len && isIdentChar(src[after]))
       return false;
     return true;
+  }
+
+  bool isIdentifierStart(char c)
+  {
+    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+  }
+
+  bool isIdentifierChar(char c)
+  {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  }
+
+  std::string mangleName(const std::string &name, const std::string &functionName)
+  {
+    if (functionName.empty())
+    {
+      return name;
+    }
+    return toLower(functionName) + "_" + name;
+  }
+
+  const FunctionInfo *findFunction(const std::string &name)
+  {
+    ensureFunctionsParsed();
+    const std::string lowered = toLower(name);
+    for (const auto &fn : functions)
+    {
+      if (fn.lowerName == lowered)
+        return &fn;
+    }
+    return nullptr;
+  }
+
+  std::string functionLabel(const std::string &name)
+  {
+    return "_" + toUpper(name);
+  }
+
+  std::string functionForPosition(std::size_t pos)
+  {
+    ensureFunctionsParsed();
+    for (const auto &fn : functions)
+    {
+      if (pos >= fn.bodyStart && pos <= fn.bodyEnd)
+      {
+        return fn.lowerName;
+      }
+    }
+    return "";
+  }
+
+  FunctionInfo parseFunctionAt(std::size_t keywordPos)
+  {
+    FunctionInfo fn;
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+    const std::size_t afterKeyword = skipWhitespaceAndComments(src, keywordPos + 8); // "function"
+    std::size_t nameStart = afterKeyword;
+    while (nameStart < len && std::isspace(static_cast<unsigned char>(src[nameStart])))
+      ++nameStart;
+    if (nameStart >= len || !isIdentifierStart(src[nameStart]))
+      return fn;
+    std::size_t nameEnd = nameStart + 1;
+    while (nameEnd < len && isIdentifierChar(src[nameEnd]))
+      ++nameEnd;
+    fn.name = src.substr(nameStart, nameEnd - nameStart);
+    fn.lowerName = toLower(fn.name);
+    fn.label = functionLabel(fn.name);
+    fn.headerStart = keywordPos;
+
+    std::size_t parenOpen = skipWhitespaceAndComments(src, nameEnd);
+    if (parenOpen >= len || src[parenOpen] != '(')
+      return fn;
+    std::size_t parenClose = findMatchingParenthesis(src, parenOpen);
+    if (parenClose == std::string::npos)
+      return fn;
+
+    const std::string paramsText = trim(src.substr(parenOpen + 1, parenClose - parenOpen - 1));
+    if (!paramsText.empty())
+    {
+      auto parts = splitTopLevel(paramsText, ',');
+      std::size_t searchBase = parenOpen + 1;
+      for (const auto &part : parts)
+      {
+        const std::string trimmed = trim(part);
+        if (trimmed.empty())
+          continue;
+        std::size_t colonPos = trimmed.find(':');
+        std::string paramName = trimmed;
+        std::string typePart;
+        if (colonPos != std::string::npos)
+        {
+          paramName = trim(trimmed.substr(0, colonPos));
+          typePart = trim(trimmed.substr(colonPos + 1));
+        }
+        if (paramName.empty())
+          continue;
+        ParameterInfo param;
+        param.name = paramName;
+        bool hasArraySuffix = !typePart.empty() && typePart.size() >= 2 && typePart.substr(typePart.size() - 2) == "[]";
+        if (hasArraySuffix)
+        {
+          typePart = trim(typePart.substr(0, typePart.size() - 2));
+        }
+        param.type = typePart.empty() ? Semantico::Type::INT : parseTypeName(typePart);
+        param.isArray = hasArraySuffix;
+        std::size_t foundPos = src.find(paramName, searchBase);
+        if (foundPos != std::string::npos && foundPos < parenClose)
+        {
+          param.position = foundPos;
+        }
+        fn.params.push_back(param);
+      }
+    }
+
+    std::size_t afterParams = skipWhitespaceAndComments(src, parenClose + 1);
+    if (afterParams < len && src[afterParams] == ':')
+    {
+      std::size_t typeStart = skipWhitespaceAndComments(src, afterParams + 1);
+      std::size_t typeEnd = typeStart;
+      while (typeEnd < len && (isIdentifierChar(src[typeEnd]) || src[typeEnd] == '[' || src[typeEnd] == ']'))
+        ++typeEnd;
+      const std::string typeToken = trim(src.substr(typeStart, typeEnd - typeStart));
+      fn.returnType = parseTypeName(typeToken);
+      afterParams = typeEnd;
+    }
+    else
+    {
+      fn.returnType = Semantico::Type::VOID;
+    }
+
+    fn.bodyStart = skipWhitespaceAndComments(src, afterParams);
+    if (fn.bodyStart >= len || src[fn.bodyStart] != '{')
+      return fn;
+    fn.bodyEnd = findMatchingBrace(src, fn.bodyStart);
+    return fn;
+  }
+
+  void ensureFunctionsParsed()
+  {
+    if (functionsParsed)
+      return;
+    functionsParsed = true;
+    functions.clear();
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+    for (std::size_t i = 0; i + 8 < len; ++i)
+    {
+      if (!isKeywordAt(src, i, "function"))
+        continue;
+      FunctionInfo fn = parseFunctionAt(i);
+      if (!fn.name.empty() && fn.bodyEnd != std::string::npos)
+      {
+        functions.push_back(std::move(fn));
+      }
+    }
   }
 
   std::string nextLabel()
@@ -359,10 +573,11 @@ namespace
     return depth;
   }
 
-  std::string makeAlias(const std::string &name, int scopeDepth)
+  std::string makeAlias(const std::string &name, const std::string &functionName, int scopeDepth)
   {
-    const std::string base = name + "_s" + std::to_string(scopeDepth);
-    int count = ++aliasCounters[base];
+    const std::string base = mangleName(name, functionName);
+    const std::string key = base + "#d" + std::to_string(scopeDepth);
+    int count = ++aliasCounters[key];
     if (count == 1)
       return base;
     return base + "_" + std::to_string(count);
@@ -370,46 +585,96 @@ namespace
 
   std::string registerAlias(const std::string &name, int position)
   {
+    ensureFunctionsParsed();
     int depth = depthForPosition(static_cast<std::size_t>(std::max(0, position)));
-    std::string alias = makeAlias(name, depth);
-    aliasEntries.push_back({name, alias, depth, position});
+    const std::string func = functionForPosition(static_cast<std::size_t>(std::max(0, position)));
+    std::string alias = makeAlias(name, func, depth);
+    aliasEntries.push_back({name, alias, func, depth, position});
     return alias;
   }
 
   std::string resolveAlias(const std::string &name, std::size_t refPos)
   {
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+    const std::string func = functionForPosition(refPos);
     int refDepth = depthForPosition(refPos);
     const AliasEntry *best = nullptr;
-    const AliasEntry *fallback = nullptr;
+    const AliasEntry *global = nullptr;
     for (const auto &entry : aliasEntries)
     {
       if (entry.original != name)
         continue;
       if (entry.scopeDepth > refDepth)
         continue;
-      bool beforeRef = entry.position >= 0 && static_cast<std::size_t>(entry.position) <= refPos;
-      if (beforeRef)
+      if (entry.functionName == func)
       {
         if (!best || entry.scopeDepth > best->scopeDepth ||
-            (entry.scopeDepth == best->scopeDepth && entry.position > best->position))
+            (entry.scopeDepth == best->scopeDepth && entry.position <= static_cast<int>(refPos)))
         {
           best = &entry;
         }
       }
-      else
+      else if (entry.functionName.empty())
       {
-        // guarda um fallback (primeira ocorrência aceitável) caso não haja nenhuma antes de refPos
-        if (!fallback || entry.scopeDepth > fallback->scopeDepth ||
-            (entry.scopeDepth == fallback->scopeDepth && entry.position < fallback->position))
+        if (!global || entry.scopeDepth > global->scopeDepth ||
+            (entry.scopeDepth == global->scopeDepth && entry.position <= static_cast<int>(refPos)))
         {
-          fallback = &entry;
+          global = &entry;
         }
       }
     }
-    const AliasEntry *chosen = best ? best : fallback;
-    if (chosen)
-      return chosen->alias;
+    if (best)
+      return best->alias;
+    if (global)
+      return global->alias;
+    if (!func.empty())
+      return mangleName(name, func);
     return name;
+  }
+
+  bool hasEntry(const std::string &alias)
+  {
+    return std::any_of(entries.begin(), entries.end(), [&](const Entry &e)
+                       { return e.name == alias; });
+  }
+
+  void ensureParametersRegistered()
+  {
+    if (parametersRegistered)
+      return;
+    ensureFunctionsParsed();
+    parametersRegistered = true;
+    for (auto &fn : functions)
+    {
+      int paramDepth = 1;
+      for (auto &param : fn.params)
+      {
+        const std::string alias = mangleName(param.name, fn.lowerName);
+        param.alias = alias;
+        parameterAliasMap[fn.lowerName + ":" + param.name] = alias;
+        aliasEntries.push_back({param.name, alias, fn.lowerName, paramDepth, static_cast<int>(param.position)});
+        if (!hasEntry(alias))
+        {
+          Entry entry;
+          entry.name = alias;
+          entry.isArray = param.isArray;
+          entry.elementCount = entry.isArray ? DEFAULT_ARRAY_LENGTH : 1;
+          entry.hasInitializer = false;
+          entries.push_back(std::move(entry));
+        }
+      }
+    }
+  }
+
+  std::string parameterAlias(const std::string &functionName, const std::string &paramName)
+  {
+    ensureParametersRegistered();
+    const std::string key = toLower(functionName) + ":" + paramName;
+    auto it = parameterAliasMap.find(key);
+    if (it != parameterAliasMap.end())
+      return it->second;
+    return mangleName(paramName, functionName);
   }
 
   struct Expr;
@@ -422,13 +687,15 @@ namespace
       Literal,
       Variable,
       ArrayAccess,
-      Binary
+      Binary,
+      Call
     } kind;
     std::string value;
     std::string op; // Mudado de char para string para suportar operadores de 2 caracteres
     ExprPtr left;
     ExprPtr right;
     ExprPtr index;
+    std::vector<ExprPtr> args;
 
     static ExprPtr makeLiteral(std::string literal)
     {
@@ -463,6 +730,15 @@ namespace
       node->op = std::move(operation);
       node->left = std::move(lhs);
       node->right = std::move(rhs);
+      return node;
+    }
+
+    static ExprPtr makeCall(std::string callee, std::vector<ExprPtr> arguments)
+    {
+      auto node = std::make_unique<Expr>();
+      node->kind = Kind::Call;
+      node->value = std::move(callee);
+      node->args = std::move(arguments);
       return node;
     }
   };
@@ -647,6 +923,22 @@ namespace
             throw std::runtime_error("Faltando ']' em acesso a vetor");
           }
           return Expr::makeArrayAccess(name, std::move(index));
+        }
+        if (match(Token::Type::LParen))
+        {
+          std::vector<ExprPtr> args;
+          if (!match(Token::Type::RParen))
+          {
+            do
+            {
+              args.push_back(parseExpression());
+            } while (match(Token::Type::Comma));
+            if (!match(Token::Type::RParen))
+            {
+              throw std::runtime_error("Faltando ')' na chamada de função");
+            }
+          }
+          return Expr::makeCall(name, std::move(args));
         }
         return Expr::makeVariable(name);
       }
@@ -1120,8 +1412,8 @@ namespace
   class ExpressionEmitter
   {
   public:
-    ExpressionEmitter(std::vector<std::string> &instructionsRef, std::size_t referencePos)
-        : instructions(instructionsRef), refPos(referencePos)
+    ExpressionEmitter(std::vector<std::string> &instructionsRef, std::size_t referencePos, bool expectsValue = true)
+        : instructions(instructionsRef), refPos(referencePos), valueRequired(expectsValue)
     {
     }
 
@@ -1236,6 +1528,52 @@ namespace
         instructions.push_back("STO " + temp);
         return temp;
       }
+      case Expr::Kind::Call:
+      {
+        ensureFunctionsParsed();
+        ensureParametersRegistered();
+        if (!functionsParsed)
+        {
+          throw std::runtime_error("Nenhuma função registrada");
+        }
+        const FunctionInfo *fn = findFunction(expr.value);
+        if (!fn)
+        {
+          throw SemanticError("A rotina \"" + expr.value + "\" não existe.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        if (fn->returnType == Semantico::Type::VOID && valueRequired)
+        {
+          throw SemanticError("A rotina \"" + expr.value + "\" não retorna valor.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        if (valueRequired && fn->returnType != Semantico::Type::INT && fn->returnType != Semantico::Type::VOID)
+        {
+          throw SemanticError("Tipo de retorno incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        const std::size_t expected = fn->params.size();
+        const std::size_t provided = expr.args.size();
+        if (expected != provided)
+        {
+          throw SemanticError("A função \"" + expr.value + "\" esperava " + std::to_string(expected) + " parâmetros e foram passados " + std::to_string(provided) + " parâmetros.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+
+        // Avalia e copia parâmetros por cópia
+        for (std::size_t idx = 0; idx < fn->params.size(); ++idx)
+        {
+          if (fn->params[idx].type != Semantico::Type::INT)
+          {
+            throw SemanticError("Tipo de parâmetro incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+          }
+          std::string argTemp = emit(*expr.args[idx]);
+          const std::string paramAlias = parameterAlias(fn->lowerName, fn->params[idx].name);
+          instructions.push_back("LD " + argTemp);
+          instructions.push_back("STO " + paramAlias);
+        }
+
+        instructions.push_back("CALL " + fn->label);
+        std::string temp = allocateTemp();
+        instructions.push_back("STO " + temp);
+        return temp;
+      }
       }
       throw std::runtime_error("Expressão desconhecida");
     }
@@ -1247,6 +1585,7 @@ namespace
     std::vector<std::string> &instructions;
     int nextTemp = TEMP_BASE_ADDRESS;
     std::size_t refPos = 0;
+    bool valueRequired = true;
 
     std::string allocateTemp()
     {
@@ -1266,6 +1605,54 @@ namespace
   };
 
   bool collectAddSubTerms(const Expr &expr, std::vector<std::pair<int, const Expr *>> &terms, int sign);
+
+  bool emitCallForContext(const Expr &expr, std::size_t refPos, std::vector<std::string> &code, const std::string *storeTarget)
+  {
+    if (expr.kind != Expr::Kind::Call)
+      return false;
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+    const FunctionInfo *fn = findFunction(expr.value);
+    if (!fn)
+    {
+      throw SemanticError("A rotina \"" + expr.value + "\" não existe.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    if (storeTarget && fn->returnType == Semantico::Type::VOID)
+    {
+      throw SemanticError("A rotina \"" + fn->name + "\" não retorna valor.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    if (storeTarget && fn->returnType != Semantico::Type::INT && fn->returnType != Semantico::Type::VOID)
+    {
+      throw SemanticError("Tipo de retorno incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    const std::size_t expected = fn->params.size();
+    const std::size_t provided = expr.args.size();
+    if (expected != provided)
+    {
+      throw SemanticError("A função \"" + expr.value + "\" esperava " + std::to_string(expected) + " parâmetros e foram passados " + std::to_string(provided) + " parâmetros.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+
+    ExpressionEmitter emitter(code, refPos);
+    emitter.reset();
+    for (std::size_t idx = 0; idx < fn->params.size(); ++idx)
+    {
+      if (fn->params[idx].type != Semantico::Type::INT)
+      {
+        throw SemanticError("Tipo de parâmetro incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+      }
+      std::string argTemp = emitter.emit(*expr.args[idx]);
+      const std::string paramAlias = parameterAlias(fn->lowerName, fn->params[idx].name);
+      code.push_back("LD " + argTemp);
+      code.push_back("STO " + paramAlias);
+    }
+
+    code.push_back("CALL " + fn->label);
+    if (storeTarget)
+    {
+      code.push_back("STO " + *storeTarget);
+    }
+    return true;
+  }
 
   bool emitIndexValue(const Expr &expr, std::vector<std::string> &code, ExpressionEmitter &emitter)
   {
@@ -2478,6 +2865,46 @@ namespace
 
   std::string buildCode()
   {
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+
+    std::unordered_map<std::string, std::vector<std::pair<std::size_t, std::vector<std::string>>>> grouped;
+    for (const auto &stmt : statementInstructions)
+    {
+      const std::string fn = functionForPosition(stmt.first);
+      grouped[fn].push_back(stmt);
+    }
+
+    auto emitInstructionBlocks = [&](const std::vector<std::pair<std::size_t, std::vector<std::string>>> &blocks, std::ostringstream &os) {
+      if (blocks.empty())
+        return;
+      auto sorted = blocks;
+      std::stable_sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
+        if (a.first != b.first)
+          return a.first < b.first;
+        const bool aLabel = !a.second.empty() && !a.second.front().empty() && a.second.front().back() == ':';
+        const bool bLabel = !b.second.empty() && !b.second.front().empty() && b.second.front().back() == ':';
+        if (aLabel != bLabel)
+          return aLabel && !bLabel;
+        return false;
+      });
+      for (const auto &blk : sorted)
+      {
+        for (const auto &instr : blk.second)
+        {
+          const bool isLabel = !instr.empty() && instr.back() == ':';
+          if (isLabel)
+          {
+            os << instr << "\n";
+          }
+          else
+          {
+            os << "    " << instr << "\n";
+          }
+        }
+      }
+    };
+
     std::ostringstream out;
     out << ".data\n";
     for (const auto &entry : entries)
@@ -2508,38 +2935,32 @@ namespace
       }
       out << "\n";
     }
-    std::vector<std::string> textInstructions = instructions;
-    std::stable_sort(statementInstructions.begin(), statementInstructions.end(),
-                     [](const auto &a, const auto &b) { return a.first < b.first; });
-    for (const auto &stmt : statementInstructions)
-    {
-      textInstructions.insert(textInstructions.end(), stmt.second.begin(), stmt.second.end());
-    }
-
-    textInstructions.insert(textInstructions.begin(), "main:");
-    textInstructions.insert(textInstructions.begin(), "JMP main");
-
     out << ".text\n";
-    if (textInstructions.empty())
+    out << "    JMP _PRINCIPAL\n";
+
+    auto sortedFunctions = functions;
+    std::sort(sortedFunctions.begin(), sortedFunctions.end(), [](const FunctionInfo &a, const FunctionInfo &b) {
+      return a.headerStart < b.headerStart;
+    });
+
+    for (const auto &fn : sortedFunctions)
     {
-      out << "  HLT 0\n";
-    }
-    else
-    {
-      for (const auto &instr : textInstructions)
+      out << fn.label << ":\n";
+      const auto it = grouped.find(fn.lowerName);
+      if (it != grouped.end())
       {
-        const bool isLabel = !instr.empty() && instr.back() == ':';
-        if (isLabel)
-        {
-          out << instr << "\n";
-        }
-        else
-        {
-          out << "    " << instr << "\n";
-        }
+        emitInstructionBlocks(it->second, out);
       }
-      out << "  HLT 0\n";
+      // Garante retorno apenas se não houver return explícito
+      if (!functionsWithReturn.count(fn.lowerName))
+      {
+        out << "    RETURN 0\n";
+      }
     }
+
+    out << "_PRINCIPAL:\n";
+    emitInstructionBlocks(grouped[""], out);
+    out << "  HLT 0\n";
 
     return out.str();
   }
@@ -2552,7 +2973,6 @@ namespace BipGenerator
   {
     entries.clear();
     cachedCode.clear();
-    instructions.clear();
     statementInstructions.clear();
     readStatementsScanned = false;
     controlFlowGenerated = false;
@@ -2560,6 +2980,11 @@ namespace BipGenerator
     aliasEntries.clear();
     aliasCounters.clear();
     seenPrints.clear();
+    functions.clear();
+    parameterAliasMap.clear();
+    functionsParsed = false;
+    parametersRegistered = false;
+    functionsWithReturn.clear();
   }
 
   void registerDeclaration(const Semantico::Variable &variable)
@@ -2715,6 +3140,14 @@ namespace BipGenerator
             emitAndStore(std::move(direct));
             return;
           }
+        }
+
+        if (expr.kind == Expr::Kind::Call)
+        {
+          std::vector<std::string> callCode;
+          emitCallForContext(expr, refPos, callCode, &targetAlias);
+          emitAndStore(std::move(callCode));
+          return;
         }
 
         if (expr.kind == Expr::Kind::Literal)
@@ -2965,31 +3398,180 @@ namespace BipGenerator
     }
   }
 
-  void scanPrintStatements()
+  void registerReturnStatement(std::size_t position, const std::string &expression)
+  {
+    ensureFunctionsParsed();
+    const std::string funcName = functionForPosition(position);
+    if (funcName.empty())
+      return;
+    const FunctionInfo *fn = findFunction(funcName);
+    if (!fn)
+      return;
+
+    try
+    {
+      std::vector<std::string> code;
+      ExpressionEmitter emitter(code, position);
+      emitter.reset();
+      std::string exprText = trim(expression);
+      if (!exprText.empty())
+      {
+        auto exprNode = parseExpressionString(exprText);
+        if (fn->returnType == Semantico::Type::VOID)
+        {
+          throw SemanticError("Retorno com valor em procedimento \"" + fn->name + "\".", static_cast<int>(position), static_cast<int>(fn->name.size()));
+        }
+        if (fn->returnType != Semantico::Type::INT)
+        {
+          throw SemanticError("Tipo de retorno incompatível na função \"" + fn->name + "\".", static_cast<int>(position), static_cast<int>(fn->name.size()));
+        }
+        if (exprNode->kind == Expr::Kind::Call)
+        {
+          emitCallForContext(*exprNode, position, code, nullptr);
+        }
+        else if (exprNode->kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(exprNode->value);
+          code.push_back("LDI " + decimalValue);
+        }
+        else if (exprNode->kind == Expr::Kind::Variable)
+        {
+          const std::string name = emitter.resolveSymbol(exprNode->value);
+          code.push_back("LD " + name);
+        }
+        else
+        {
+          std::string valueTemp = emitter.emit(*exprNode);
+          code.push_back("LD " + valueTemp);
+        }
+      }
+      else
+      {
+        code.push_back("LDI 0");
+      }
+      code.push_back("RETURN 0");
+      statementInstructions.emplace_back(position, std::move(code));
+      functionsWithReturn.insert(funcName);
+    }
+    catch (const std::exception &)
+    {
+      // ignora returns inválidos
+    }
+  }
+
+  void scanReturnStatements()
   {
     const std::string &src = Semantico::sourceCode;
-    const std::string keyword = "print";
+    const std::string keyword = "return";
     const std::size_t len = src.size();
 
-    for (std::size_t i = 0; i + keyword.size() < len; ++i)
+    for (std::size_t i = 0; i + keyword.size() <= len; ++i)
     {
-      if (src.compare(i, keyword.size(), keyword) != 0)
+      if (!isKeywordAt(src, i, keyword))
         continue;
-      if (i > 0 && (std::isalnum(static_cast<unsigned char>(src[i - 1])) || src[i - 1] == '_'))
+      std::size_t exprStart = skipWhitespaceAndComments(src, i + keyword.size());
+      int depthParen = 0;
+      int depthBracket = 0;
+      int depthBrace = 0;
+      std::size_t end = exprStart;
+      for (; end < len; ++end)
+      {
+        char c = src[end];
+        if (c == ';' && depthParen == 0 && depthBracket == 0 && depthBrace == 0)
+          break;
+        if (c == '(')
+          ++depthParen;
+        else if (c == ')')
+          --depthParen;
+        else if (c == '[')
+          ++depthBracket;
+        else if (c == ']')
+          --depthBracket;
+        else if (c == '{')
+          ++depthBrace;
+        else if (c == '}')
+          --depthBrace;
+      }
+      if (end >= len || src[end] != ';')
         continue;
-      std::size_t j = i + keyword.size();
-      while (j < len && std::isspace(static_cast<unsigned char>(src[j])))
-        ++j;
-      if (j >= len || src[j] != '(')
+      std::string exprText;
+      if (end > exprStart)
+      {
+        exprText = trim(src.substr(exprStart, end - exprStart));
+      }
+      registerReturnStatement(i, exprText);
+      i = end;
+    }
+  }
+
+  bool isStandaloneCallCandidate(const std::string &identifier)
+  {
+    static const std::unordered_set<std::string> keywords = {"if", "else", "for", "while", "do", "function", "return", "switch", "case", "print", "read"};
+    return !keywords.count(identifier);
+  }
+
+  void scanCallStatements()
+  {
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+
+    for (std::size_t i = 0; i < len; ++i)
+    {
+      char c = src[i];
+      if (!isIdentifierStart(c))
         continue;
-      std::size_t close = findMatchingParenthesis(src, j);
-      if (close == std::string::npos)
+      if (i > 0 && isIdentifierChar(src[i - 1]))
         continue;
-      std::string argument = trim(src.substr(j + 1, close - j - 1));
-      if (argument.empty())
+      std::size_t nameEnd = i + 1;
+      while (nameEnd < len && isIdentifierChar(src[nameEnd]))
+        ++nameEnd;
+      std::string ident = src.substr(i, nameEnd - i);
+      if (!isStandaloneCallCandidate(ident))
+      {
+        i = nameEnd > 0 ? nameEnd - 1 : i;
         continue;
-      registerPrintStatement(i, argument);
-      i = close;
+      }
+      std::size_t afterName = skipWhitespaceAndComments(src, nameEnd);
+      if (afterName >= len || src[afterName] != '(')
+        continue;
+      std::size_t parenClose = findMatchingParenthesis(src, afterName);
+      if (parenClose == std::string::npos)
+        continue;
+      std::size_t afterCall = skipWhitespaceAndComments(src, parenClose + 1);
+      if (afterCall >= len || src[afterCall] != ';')
+        continue;
+
+      // garante que não é parte de uma atribuição ou expressão maior
+      std::size_t scan = i;
+      while (scan > 0 && std::isspace(static_cast<unsigned char>(src[scan - 1])))
+        --scan;
+      if (scan > 0)
+      {
+        char prev = src[scan - 1];
+        if (prev != ';' && prev != '{' && prev != '}' && prev != '\n')
+        {
+          continue;
+        }
+      }
+
+      const std::string callText = trim(src.substr(i, parenClose - i + 1));
+      try
+      {
+        std::vector<std::string> code;
+        ExpressionEmitter emitter(code, i, false);
+        emitter.reset();
+        auto expr = parseExpressionString(callText);
+        if (expr && expr->kind == Expr::Kind::Call)
+        {
+          emitter.emit(*expr);
+          statementInstructions.emplace_back(i, std::move(code));
+        }
+      }
+      catch (const std::exception &)
+      {
+        // ignora chamadas inválidas
+      }
+      i = afterCall;
     }
   }
 
@@ -2997,6 +3579,9 @@ namespace BipGenerator
   {
     generateControlFlow();
     scanReadStatements();
+    scanReturnStatements();
+    scanCallStatements();
+    ensureParametersRegistered();
     cachedCode = buildCode();
     return cachedCode;
   }

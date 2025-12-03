@@ -1034,7 +1034,7 @@ namespace
     {
       BipGenerator::registerDeclaration(Semantico::currentVariable);
     }
-    else if (!Semantico::currentVariable.value.empty() || Semantico::currentVariable.isArray)
+    else if (Semantico::currentVariable.isInitialized || !Semantico::currentVariable.value.empty() || Semantico::currentVariable.isArray)
     {
       auto symbolType = semanticTable.getSymbolType(entrada.name);
       if (symbolType == SemanticTable::INT)
@@ -1272,6 +1272,10 @@ void Semantico::executeAction(int action, const Token *token)
       semanticTable.markUseIfDeclared(lexema, token->getPosition(), static_cast<int>(token->getLexeme().size()));
       const auto retorno = semanticTable.getSymbolType(lexema);
       registerExpressionOperand(retorno, token);
+      Semantico::currentVariable.value.push_back(lexema);
+      Semantico::currentVariable.valuePositions.push_back(token ? token->getPosition() : -1);
+      Semantico::currentVariable.valueLengths.push_back(token ? static_cast<int>(token->getLexeme().size()) : 1);
+      Semantico::currentVariable.isInitialized = true;
     }
     Semantico::currentVariable.isUsed = true;
     break;
