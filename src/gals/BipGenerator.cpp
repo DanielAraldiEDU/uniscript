@@ -380,28 +380,35 @@ namespace
   {
     int refDepth = depthForPosition(refPos);
     const AliasEntry *best = nullptr;
+    const AliasEntry *fallback = nullptr;
     for (const auto &entry : aliasEntries)
     {
       if (entry.original != name)
         continue;
       if (entry.scopeDepth > refDepth)
         continue;
-      if (!best)
+      bool beforeRef = entry.position >= 0 && static_cast<std::size_t>(entry.position) <= refPos;
+      if (beforeRef)
       {
-        best = &entry;
-        continue;
+        if (!best || entry.scopeDepth > best->scopeDepth ||
+            (entry.scopeDepth == best->scopeDepth && entry.position > best->position))
+        {
+          best = &entry;
+        }
       }
-      if (entry.scopeDepth > best->scopeDepth)
+      else
       {
-        best = &entry;
-      }
-      else if (entry.scopeDepth == best->scopeDepth && entry.position > best->position)
-      {
-        best = &entry;
+        // guarda um fallback (primeira ocorrência aceitável) caso não haja nenhuma antes de refPos
+        if (!fallback || entry.scopeDepth > fallback->scopeDepth ||
+            (entry.scopeDepth == fallback->scopeDepth && entry.position < fallback->position))
+        {
+          fallback = &entry;
+        }
       }
     }
-    if (best)
-      return best->alias;
+    const AliasEntry *chosen = best ? best : fallback;
+    if (chosen)
+      return chosen->alias;
     return name;
   }
 
