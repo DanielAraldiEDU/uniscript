@@ -11,14 +11,19 @@
 #include <algorithm>
 #include <limits>
 #include <stdio.h>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
-  constexpr const int TEMP_BASE_ADDRESS = 1100;
-  constexpr const int TEMP_MAX_ADDRESS = 2047;
+  // Reservamos temporários para expressões bem abaixo do limite de 1023 do BIP
+  // e longe dos registradores auxiliares 1000/1001/1002.
+  constexpr const int TEMP_BASE_ADDRESS = 900;
+  constexpr const int TEMP_MAX_ADDRESS = 999;
   constexpr const char *TEMP_VECTOR_INDEX = "1002";
   constexpr const char *TEMP_VECTOR_VALUE = "1000";
   constexpr const char *TEMP_VECTOR_VALUE_ALT = "1001";
+  constexpr const std::size_t DEFAULT_ARRAY_LENGTH = 16;
 
   struct Entry
   {
@@ -30,11 +35,65 @@ namespace
   };
 
   std::vector<Entry> entries;
-  std::vector<std::string> instructions;
   std::vector<std::pair<std::size_t, std::vector<std::string>>> statementInstructions;
   std::string cachedCode;
   constexpr const char *OUTPUT_FILE = "output.bip";
   static bool readStatementsScanned = false;
+  static bool controlFlowGenerated = false;
+  static std::size_t labelCounter = 1;
+  static std::unordered_set<std::string> functionsWithReturn;
+  struct AliasEntry
+  {
+    std::string original;
+    std::string alias;
+    std::string functionName;
+    int scopeDepth = 0;
+    int position = -1;
+  };
+  std::vector<AliasEntry> aliasEntries;
+  std::unordered_map<std::string, int> aliasCounters;
+  std::unordered_set<std::string> seenPrints;
+  struct ParameterInfo
+  {
+    std::string name;
+    Semantico::Type type = Semantico::Type::INT;
+    bool isArray = false;
+    std::size_t position = 0;
+    std::string alias;
+  };
+
+  struct FunctionInfo
+  {
+    std::string name;
+    std::string lowerName;
+    std::string label;
+    Semantico::Type returnType = Semantico::Type::VOID;
+    std::size_t headerStart = 0;
+    std::size_t bodyStart = 0;
+    std::size_t bodyEnd = 0;
+    std::vector<ParameterInfo> params;
+  };
+
+  std::vector<FunctionInfo> functions;
+  static bool functionsParsed = false;
+  static bool parametersRegistered = false;
+  std::unordered_map<std::string, std::string> parameterAliasMap;
+
+  std::string toLower(std::string text)
+  {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return text;
+  }
+
+  std::string toUpper(std::string text)
+  {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    return text;
+  }
+
+  void ensureFunctionsParsed();
+  void ensureParametersRegistered();
+  std::vector<std::string> splitTopLevel(const std::string &source, char separator);
 
   std::string trim(const std::string &text)
   {
@@ -64,10 +123,13 @@ namespace
   // Verifica se string é um número binário
   bool isBinaryLiteral(const std::string &str)
   {
-    if (str.empty())
+    if (str.size() < 3)
       return false;
-    for (char c : str)
+    if (!(str[0] == '0' && (str[1] == 'b' || str[1] == 'B')))
+      return false;
+    for (std::size_t i = 2; i < str.size(); ++i)
     {
+      char c = str[i];
       if (c != '0' && c != '1')
         return false;
     }
@@ -79,7 +141,7 @@ namespace
   {
     if (isBinaryLiteral(literal))
     {
-      return std::to_string(binaryToDecimal(literal));
+      return std::to_string(binaryToDecimal(literal.substr(2)));
     }
     return literal;
   }
@@ -106,6 +168,518 @@ namespace
     return std::string::npos;
   }
 
+  std::size_t skipWhitespaceAndComments(const std::string &src, std::size_t pos)
+  {
+    const std::size_t len = src.size();
+    while (pos < len)
+    {
+      char c = src[pos];
+      if (std::isspace(static_cast<unsigned char>(c)))
+      {
+        ++pos;
+        continue;
+      }
+      if (c == '/' && pos + 1 < len)
+      {
+        char next = src[pos + 1];
+        if (next == '/')
+        {
+          pos += 2;
+          while (pos < len && src[pos] != '\n')
+            ++pos;
+          continue;
+        }
+        if (next == '*')
+        {
+          pos += 2;
+          while (pos + 1 < len && !(src[pos] == '*' && src[pos + 1] == '/'))
+            ++pos;
+          if (pos + 1 < len)
+            pos += 2;
+          continue;
+        }
+      }
+      break;
+    }
+    return pos;
+  }
+
+  std::size_t findMatchingBrace(const std::string &src, std::size_t openPos)
+  {
+    if (openPos >= src.size() || src[openPos] != '{')
+      return std::string::npos;
+    int depth = 0;
+    const std::size_t len = src.size();
+    for (std::size_t idx = openPos; idx < len; ++idx)
+    {
+      char c = src[idx];
+      if (c == '"' || c == '\'')
+      {
+        const char delim = c;
+        ++idx;
+        while (idx < len)
+        {
+          if (src[idx] == '\\' && idx + 1 < len)
+          {
+            idx += 2;
+            continue;
+          }
+          if (src[idx] == delim)
+            break;
+          ++idx;
+        }
+        continue;
+      }
+      if (c == '/' && idx + 1 < len)
+      {
+        if (src[idx + 1] == '/')
+        {
+          idx += 2;
+          while (idx < len && src[idx] != '\n')
+            ++idx;
+          continue;
+        }
+        if (src[idx + 1] == '*')
+        {
+          idx += 2;
+          while (idx + 1 < len && !(src[idx] == '*' && src[idx + 1] == '/'))
+            ++idx;
+          continue;
+        }
+      }
+      if (c == '{')
+      {
+        ++depth;
+      }
+      else if (c == '}')
+      {
+        --depth;
+        if (depth == 0)
+        {
+          return idx;
+        }
+      }
+    }
+    return std::string::npos;
+  }
+
+  Semantico::Type parseTypeName(const std::string &typeToken)
+  {
+    const std::string lowered = toLower(typeToken);
+    if (lowered == "int")
+      return Semantico::Type::INT;
+    if (lowered == "float")
+      return Semantico::Type::FLOAT;
+    if (lowered == "string")
+      return Semantico::Type::STRING;
+    if (lowered == "bool" || lowered == "boolean")
+      return Semantico::Type::BOOLEAN;
+    if (lowered == "void")
+      return Semantico::Type::VOID;
+    return Semantico::Type::NULLABLE;
+  }
+
+  bool isKeywordAt(const std::string &src, std::size_t pos, const std::string &keyword)
+  {
+    const std::size_t len = src.size();
+    if (pos + keyword.size() > len)
+      return false;
+    if (src.compare(pos, keyword.size(), keyword) != 0)
+      return false;
+    auto isIdentChar = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+    if (pos > 0 && isIdentChar(src[pos - 1]))
+      return false;
+    const std::size_t after = pos + keyword.size();
+    if (after < len && isIdentChar(src[after]))
+      return false;
+    return true;
+  }
+
+  bool isIdentifierStart(char c)
+  {
+    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+  }
+
+  bool isIdentifierChar(char c)
+  {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  }
+
+  std::string mangleName(const std::string &name, const std::string &functionName)
+  {
+    if (functionName.empty())
+    {
+      return name;
+    }
+    return toLower(functionName) + "_" + name;
+  }
+
+  const FunctionInfo *findFunction(const std::string &name)
+  {
+    ensureFunctionsParsed();
+    const std::string lowered = toLower(name);
+    for (const auto &fn : functions)
+    {
+      if (fn.lowerName == lowered)
+        return &fn;
+    }
+    return nullptr;
+  }
+
+  std::string functionLabel(const std::string &name)
+  {
+    return "_" + toUpper(name);
+  }
+
+  std::string functionForPosition(std::size_t pos)
+  {
+    ensureFunctionsParsed();
+    for (const auto &fn : functions)
+    {
+      if (pos >= fn.bodyStart && pos <= fn.bodyEnd)
+      {
+        return fn.lowerName;
+      }
+    }
+    return "";
+  }
+
+  FunctionInfo parseFunctionAt(std::size_t keywordPos)
+  {
+    FunctionInfo fn;
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+    const std::size_t afterKeyword = skipWhitespaceAndComments(src, keywordPos + 8); // "function"
+    std::size_t nameStart = afterKeyword;
+    while (nameStart < len && std::isspace(static_cast<unsigned char>(src[nameStart])))
+      ++nameStart;
+    if (nameStart >= len || !isIdentifierStart(src[nameStart]))
+      return fn;
+    std::size_t nameEnd = nameStart + 1;
+    while (nameEnd < len && isIdentifierChar(src[nameEnd]))
+      ++nameEnd;
+    fn.name = src.substr(nameStart, nameEnd - nameStart);
+    fn.lowerName = toLower(fn.name);
+    fn.label = functionLabel(fn.name);
+    fn.headerStart = keywordPos;
+
+    std::size_t parenOpen = skipWhitespaceAndComments(src, nameEnd);
+    if (parenOpen >= len || src[parenOpen] != '(')
+      return fn;
+    std::size_t parenClose = findMatchingParenthesis(src, parenOpen);
+    if (parenClose == std::string::npos)
+      return fn;
+
+    const std::string paramsText = trim(src.substr(parenOpen + 1, parenClose - parenOpen - 1));
+    if (!paramsText.empty())
+    {
+      auto parts = splitTopLevel(paramsText, ',');
+      std::size_t searchBase = parenOpen + 1;
+      for (const auto &part : parts)
+      {
+        const std::string trimmed = trim(part);
+        if (trimmed.empty())
+          continue;
+        std::size_t colonPos = trimmed.find(':');
+        std::string paramName = trimmed;
+        std::string typePart;
+        if (colonPos != std::string::npos)
+        {
+          paramName = trim(trimmed.substr(0, colonPos));
+          typePart = trim(trimmed.substr(colonPos + 1));
+        }
+        if (paramName.empty())
+          continue;
+        ParameterInfo param;
+        param.name = paramName;
+        bool hasArraySuffix = !typePart.empty() && typePart.size() >= 2 && typePart.substr(typePart.size() - 2) == "[]";
+        if (hasArraySuffix)
+        {
+          typePart = trim(typePart.substr(0, typePart.size() - 2));
+        }
+        param.type = typePart.empty() ? Semantico::Type::INT : parseTypeName(typePart);
+        param.isArray = hasArraySuffix;
+        std::size_t foundPos = src.find(paramName, searchBase);
+        if (foundPos != std::string::npos && foundPos < parenClose)
+        {
+          param.position = foundPos;
+        }
+        fn.params.push_back(param);
+      }
+    }
+
+    std::size_t afterParams = skipWhitespaceAndComments(src, parenClose + 1);
+    if (afterParams < len && src[afterParams] == ':')
+    {
+      std::size_t typeStart = skipWhitespaceAndComments(src, afterParams + 1);
+      std::size_t typeEnd = typeStart;
+      while (typeEnd < len && (isIdentifierChar(src[typeEnd]) || src[typeEnd] == '[' || src[typeEnd] == ']'))
+        ++typeEnd;
+      const std::string typeToken = trim(src.substr(typeStart, typeEnd - typeStart));
+      fn.returnType = parseTypeName(typeToken);
+      afterParams = typeEnd;
+    }
+    else
+    {
+      fn.returnType = Semantico::Type::VOID;
+    }
+
+    fn.bodyStart = skipWhitespaceAndComments(src, afterParams);
+    if (fn.bodyStart >= len || src[fn.bodyStart] != '{')
+      return fn;
+    fn.bodyEnd = findMatchingBrace(src, fn.bodyStart);
+    return fn;
+  }
+
+  void ensureFunctionsParsed()
+  {
+    if (functionsParsed)
+      return;
+    functionsParsed = true;
+    functions.clear();
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+    for (std::size_t i = 0; i + 8 < len; ++i)
+    {
+      if (!isKeywordAt(src, i, "function"))
+        continue;
+      FunctionInfo fn = parseFunctionAt(i);
+      if (!fn.name.empty() && fn.bodyEnd != std::string::npos)
+      {
+        functions.push_back(std::move(fn));
+      }
+    }
+  }
+
+  std::string nextLabel()
+  {
+    return "R" + std::to_string(labelCounter++);
+  }
+
+  int scopeDepthAt(std::size_t position)
+  {
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = std::min(position, src.size());
+    int depth = 0;
+    bool inString = false;
+    char stringDelim = 0;
+    bool inLineComment = false;
+    bool inBlockComment = false;
+
+    for (std::size_t i = 0; i < len; ++i)
+    {
+      char c = src[i];
+      if (inString)
+      {
+        if (c == '\\' && i + 1 < len)
+        {
+          ++i;
+          continue;
+        }
+        if (c == stringDelim)
+        {
+          inString = false;
+        }
+        continue;
+      }
+      if (inLineComment)
+      {
+        if (c == '\n')
+          inLineComment = false;
+        continue;
+      }
+      if (inBlockComment)
+      {
+        if (c == '*' && i + 1 < len && src[i + 1] == '/')
+        {
+          inBlockComment = false;
+          ++i;
+        }
+        continue;
+      }
+      if (c == '/' && i + 1 < len)
+      {
+        if (src[i + 1] == '/')
+        {
+          inLineComment = true;
+          ++i;
+          continue;
+        }
+        if (src[i + 1] == '*')
+        {
+          inBlockComment = true;
+          ++i;
+          continue;
+        }
+      }
+      if (c == '"' || c == '\'')
+      {
+        inString = true;
+        stringDelim = c;
+        continue;
+      }
+      if (c == '{')
+        ++depth;
+      else if (c == '}')
+        depth = std::max(0, depth - 1);
+    }
+    return depth;
+  }
+
+  bool isInsideForHeader(std::size_t position)
+  {
+    const std::string &src = Semantico::sourceCode;
+    if (position >= src.size())
+      return false;
+    // procura um "for" antes da posição
+    std::size_t searchPos = position;
+    while (searchPos > 0)
+    {
+      --searchPos;
+      if (!std::isspace(static_cast<unsigned char>(src[searchPos])))
+        break;
+    }
+
+    for (std::size_t i = searchPos + 1; i > 0; --i)
+    {
+      std::size_t idx = i - 1;
+      if (src[idx] != 'f')
+        continue;
+      if (idx + 3 > src.size())
+        continue;
+      if (!isKeywordAt(src, idx, "for"))
+        continue;
+      std::size_t parenPos = skipWhitespaceAndComments(src, idx + 3);
+      if (parenPos >= src.size() || src[parenPos] != '(')
+        continue;
+      std::size_t parenClose = findMatchingParenthesis(src, parenPos);
+      if (parenClose == std::string::npos)
+        continue;
+      if (position > parenPos && position < parenClose)
+        return true;
+      if (position <= idx)
+        break;
+    }
+    return false;
+  }
+
+  int depthForPosition(std::size_t position)
+  {
+    int depth = scopeDepthAt(position);
+    if (isInsideForHeader(position))
+    {
+      depth += 1;
+    }
+    return depth;
+  }
+
+  std::string makeAlias(const std::string &name, const std::string &functionName, int scopeDepth)
+  {
+    std::string base = mangleName(name, functionName);
+    if (scopeDepth > 0)
+    {
+      base += "_s" + std::to_string(scopeDepth);
+    }
+    int count = ++aliasCounters[base];
+    if (count == 1)
+      return base;
+    return base + "_" + std::to_string(count);
+  }
+
+  std::string registerAlias(const std::string &name, int position)
+  {
+    ensureFunctionsParsed();
+    int depth = depthForPosition(static_cast<std::size_t>(std::max(0, position)));
+    const std::string func = functionForPosition(static_cast<std::size_t>(std::max(0, position)));
+    std::string alias = makeAlias(name, func, depth);
+    aliasEntries.push_back({name, alias, func, depth, position});
+    return alias;
+  }
+
+  std::string resolveAlias(const std::string &name, std::size_t refPos)
+  {
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+    const std::string func = functionForPosition(refPos);
+    int refDepth = depthForPosition(refPos);
+    const AliasEntry *best = nullptr;
+    const AliasEntry *global = nullptr;
+    for (const auto &entry : aliasEntries)
+    {
+      if (entry.original != name)
+        continue;
+      if (entry.scopeDepth > refDepth)
+        continue;
+      if (entry.functionName == func)
+      {
+        if (!best || entry.scopeDepth > best->scopeDepth ||
+            (entry.scopeDepth == best->scopeDepth && entry.position <= static_cast<int>(refPos)))
+        {
+          best = &entry;
+        }
+      }
+      else if (entry.functionName.empty())
+      {
+        if (!global || entry.scopeDepth > global->scopeDepth ||
+            (entry.scopeDepth == global->scopeDepth && entry.position <= static_cast<int>(refPos)))
+        {
+          global = &entry;
+        }
+      }
+    }
+    if (best)
+      return best->alias;
+    if (global)
+      return global->alias;
+    if (!func.empty())
+      return mangleName(name, func);
+    return name;
+  }
+
+  bool hasEntry(const std::string &alias)
+  {
+    return std::any_of(entries.begin(), entries.end(), [&](const Entry &e)
+                       { return e.name == alias; });
+  }
+
+  void ensureParametersRegistered()
+  {
+    if (parametersRegistered)
+      return;
+    ensureFunctionsParsed();
+    parametersRegistered = true;
+    for (auto &fn : functions)
+    {
+      int paramDepth = 1;
+      for (auto &param : fn.params)
+      {
+        const std::string alias = makeAlias(param.name, fn.lowerName, 0);
+        param.alias = alias;
+        parameterAliasMap[fn.lowerName + ":" + param.name] = alias;
+        aliasEntries.push_back({param.name, alias, fn.lowerName, paramDepth, static_cast<int>(param.position)});
+        if (!hasEntry(alias))
+        {
+          Entry entry;
+          entry.name = alias;
+          entry.isArray = param.isArray;
+          entry.elementCount = entry.isArray ? DEFAULT_ARRAY_LENGTH : 1;
+          entry.hasInitializer = false;
+          entries.push_back(std::move(entry));
+        }
+      }
+    }
+  }
+
+  std::string parameterAlias(const std::string &functionName, const std::string &paramName)
+  {
+    ensureParametersRegistered();
+    const std::string key = toLower(functionName) + ":" + paramName;
+    auto it = parameterAliasMap.find(key);
+    if (it != parameterAliasMap.end())
+      return it->second;
+    return mangleName(paramName, functionName);
+  }
+
   struct Expr;
   using ExprPtr = std::unique_ptr<Expr>;
 
@@ -116,13 +690,15 @@ namespace
       Literal,
       Variable,
       ArrayAccess,
-      Binary
+      Binary,
+      Call
     } kind;
     std::string value;
     std::string op; // Mudado de char para string para suportar operadores de 2 caracteres
     ExprPtr left;
     ExprPtr right;
     ExprPtr index;
+    std::vector<ExprPtr> args;
 
     static ExprPtr makeLiteral(std::string literal)
     {
@@ -157,6 +733,15 @@ namespace
       node->op = std::move(operation);
       node->left = std::move(lhs);
       node->right = std::move(rhs);
+      return node;
+    }
+
+    static ExprPtr makeCall(std::string callee, std::vector<ExprPtr> arguments)
+    {
+      auto node = std::make_unique<Expr>();
+      node->kind = Kind::Call;
+      node->value = std::move(callee);
+      node->args = std::move(arguments);
       return node;
     }
   };
@@ -342,6 +927,22 @@ namespace
           }
           return Expr::makeArrayAccess(name, std::move(index));
         }
+        if (match(Token::Type::LParen))
+        {
+          std::vector<ExprPtr> args;
+          if (!match(Token::Type::RParen))
+          {
+            do
+            {
+              args.push_back(parseExpression());
+            } while (match(Token::Type::Comma));
+            if (!match(Token::Type::RParen))
+            {
+              throw std::runtime_error("Faltando ')' na chamada de função");
+            }
+          }
+          return Expr::makeCall(name, std::move(args));
+        }
         return Expr::makeVariable(name);
       }
       if (match(Token::Type::LParen))
@@ -437,8 +1038,39 @@ namespace
         start = static_cast<std::size_t>(best);
       }
     }
+
+    auto fallbackFind = [&]() -> std::size_t {
+      if (variable.name.empty())
+        return std::string::npos;
+      std::size_t pos = 0;
+      while (true)
+      {
+        pos = src.find(variable.name, pos);
+        if (pos == std::string::npos)
+          return std::string::npos;
+        // garante que não está no meio de outro identificador
+        auto isIdent = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+        if ((pos > 0 && isIdent(src[pos - 1])) || (pos + variable.name.size() < src.size() && isIdent(src[pos + variable.name.size()])))
+        {
+          pos += variable.name.size();
+          continue;
+        }
+        std::size_t eq = src.find('=', pos + variable.name.size());
+        if (eq == std::string::npos)
+          return std::string::npos;
+        std::size_t semi = src.find(';', eq);
+        if (semi == std::string::npos)
+          return std::string::npos;
+        return pos;
+      }
+    };
+
     if (start == std::string::npos || start >= src.size())
-      return false;
+    {
+      start = fallbackFind();
+      if (start == std::string::npos || start >= src.size())
+        return false;
+    }
 
     while (start > 0 && std::isspace(static_cast<unsigned char>(src[start - 1])))
       --start;
@@ -597,6 +1229,111 @@ namespace
     return !lhsOut.empty() && !rhsOut.empty();
   }
 
+  bool quickSliceAroundPosition(const Semantico::Variable &variable, std::string &lhsOut, std::string &rhsOut, std::size_t &statementStart)
+  {
+    const std::string &src = Semantico::sourceCode;
+    if (src.empty())
+      return false;
+    // tenta âncora próxima da posição conhecida
+    std::size_t anchor = (variable.position >= 0 && static_cast<std::size_t>(variable.position) < src.size())
+                             ? static_cast<std::size_t>(variable.position)
+                             : 0;
+
+    auto trySliceAt = [&](std::size_t namePos) -> bool {
+      std::size_t eq = src.find('=', namePos);
+      while (eq != std::string::npos)
+      {
+        if (!(eq + 1 < src.size() && src[eq + 1] == '='))
+          break;
+        eq = src.find('=', eq + 2);
+      }
+      if (eq == std::string::npos)
+        return false;
+      std::size_t semi = src.find(';', eq);
+      if (semi == std::string::npos)
+        return false;
+      std::size_t lhsEnd = eq;
+      while (lhsEnd > 0 && std::isspace(static_cast<unsigned char>(src[lhsEnd - 1])))
+        --lhsEnd;
+      std::size_t lhsStart = lhsEnd;
+      while (lhsStart > 0)
+      {
+        char c = src[lhsStart - 1];
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '[' || c == ']')
+        {
+          --lhsStart;
+          continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(c)))
+        {
+          --lhsStart;
+          continue;
+        }
+        break;
+      }
+      lhsOut = trim(src.substr(lhsStart, lhsEnd - lhsStart));
+      rhsOut = trim(src.substr(eq + 1, semi - eq - 1));
+      statementStart = lhsStart;
+      return !lhsOut.empty() && !rhsOut.empty();
+    };
+
+    if (trySliceAt(anchor))
+      return true;
+
+    // fallback: busca por atribuição usando o nome do vetor mais próximo do topo
+    if (!variable.name.empty())
+    {
+      std::size_t pos = 0;
+      auto isIdent = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
+      while (true)
+      {
+        pos = src.find(variable.name, pos);
+        if (pos == std::string::npos)
+          break;
+        if ((pos > 0 && isIdent(src[pos - 1])) || (pos + variable.name.size() < src.size() && isIdent(src[pos + variable.name.size()])))
+        {
+          pos += variable.name.size();
+          continue;
+        }
+
+        std::size_t afterName = pos + variable.name.size();
+        // se for atribuição de vetor, exige '[' logo após nome (ignorando espaços)
+        std::size_t scan = afterName;
+        while (scan < src.size() && std::isspace(static_cast<unsigned char>(src[scan])))
+          ++scan;
+        if (variable.isArray)
+        {
+          if (scan >= src.size() || src[scan] != '[')
+          {
+            pos += variable.name.size();
+            continue; // não é acesso a elemento
+          }
+        }
+
+        // evita pegar declaração: se houver ':' antes do '=' mais próximo, pula
+        std::size_t nextEq = src.find('=', scan);
+        if (nextEq == std::string::npos)
+        {
+          pos += variable.name.size();
+          continue;
+        }
+        std::size_t colonPos = src.find(':', afterName);
+        if (colonPos != std::string::npos && colonPos < nextEq)
+        {
+          pos += variable.name.size();
+          continue; // é declaração
+        }
+
+        if (trySliceAt(pos))
+          return true;
+
+        pos += variable.name.size();
+      }
+    }
+
+    return false;
+  }
+
   ExprPtr parseExpressionString(const std::string &exprString)
   {
     Parser parser(exprString);
@@ -614,7 +1351,10 @@ namespace
     std::string rhs;
     std::size_t statementStart = 0;
     if (!extractAssignmentSlices(variable, lhs, rhs, statementStart))
-      return false;
+    {
+      if (!quickSliceAroundPosition(variable, lhs, rhs, statementStart))
+        return false;
+    }
 
     if (lhs.empty() || rhs.empty())
       return false;
@@ -675,8 +1415,8 @@ namespace
   class ExpressionEmitter
   {
   public:
-    explicit ExpressionEmitter(std::vector<std::string> &instructionsRef)
-        : instructions(instructionsRef)
+    ExpressionEmitter(std::vector<std::string> &instructionsRef, std::size_t referencePos, bool expectsValue = true)
+        : instructions(instructionsRef), refPos(referencePos), valueRequired(expectsValue)
     {
     }
 
@@ -700,7 +1440,8 @@ namespace
       case Expr::Kind::Variable:
       {
         std::string temp = allocateTemp();
-        instructions.push_back("LD " + expr.value);
+        const std::string name = resolveName(expr.value);
+        instructions.push_back("LD " + name);
         instructions.push_back("STO " + temp);
         return temp;
       }
@@ -715,7 +1456,8 @@ namespace
         instructions.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
         instructions.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
         instructions.push_back("STO $indr");
-        instructions.push_back("LDV " + expr.value);
+        const std::string arrayName = resolveName(expr.value);
+        instructions.push_back("LDV " + arrayName);
         std::string temp = allocateTemp();
         instructions.push_back("STO " + temp);
         return temp;
@@ -789,13 +1531,64 @@ namespace
         instructions.push_back("STO " + temp);
         return temp;
       }
+      case Expr::Kind::Call:
+      {
+        ensureFunctionsParsed();
+        ensureParametersRegistered();
+        if (!functionsParsed)
+        {
+          throw std::runtime_error("Nenhuma função registrada");
+        }
+        const FunctionInfo *fn = findFunction(expr.value);
+        if (!fn)
+        {
+          throw SemanticError("A rotina \"" + expr.value + "\" não existe.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        if (fn->returnType == Semantico::Type::VOID && valueRequired)
+        {
+          throw SemanticError("A rotina \"" + expr.value + "\" não retorna valor.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        if (valueRequired && fn->returnType != Semantico::Type::INT && fn->returnType != Semantico::Type::VOID)
+        {
+          throw SemanticError("Tipo de retorno incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+        const std::size_t expected = fn->params.size();
+        const std::size_t provided = expr.args.size();
+        if (expected != provided)
+        {
+          throw SemanticError("A função \"" + expr.value + "\" esperava " + std::to_string(expected) + " parâmetros e foram passados " + std::to_string(provided) + " parâmetros.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+        }
+
+        // Avalia e copia parâmetros por cópia
+        for (std::size_t idx = 0; idx < fn->params.size(); ++idx)
+        {
+          if (fn->params[idx].type != Semantico::Type::INT)
+          {
+            throw SemanticError("Tipo de parâmetro incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+          }
+          std::string argTemp = emit(*expr.args[idx]);
+          const std::string paramAlias = parameterAlias(fn->lowerName, fn->params[idx].name);
+          instructions.push_back("LD " + argTemp);
+          instructions.push_back("STO " + paramAlias);
+        }
+
+        instructions.push_back("CALL " + fn->label);
+        std::string temp = allocateTemp();
+        instructions.push_back("STO " + temp);
+        return temp;
+      }
       }
       throw std::runtime_error("Expressão desconhecida");
     }
 
+    std::size_t position() const { return refPos; }
+    std::string resolveSymbol(const std::string &name) const { return resolveName(name); }
+
   private:
     std::vector<std::string> &instructions;
     int nextTemp = TEMP_BASE_ADDRESS;
+    std::size_t refPos = 0;
+    bool valueRequired = true;
 
     std::string allocateTemp()
     {
@@ -805,9 +1598,64 @@ namespace
       }
       return std::to_string(nextTemp++);
     }
+
+    std::string resolveName(const std::string &name) const
+    {
+      if (name.empty())
+        return name;
+      return resolveAlias(name, refPos);
+    }
   };
 
   bool collectAddSubTerms(const Expr &expr, std::vector<std::pair<int, const Expr *>> &terms, int sign);
+
+  bool emitCallForContext(const Expr &expr, std::size_t refPos, std::vector<std::string> &code, const std::string *storeTarget)
+  {
+    if (expr.kind != Expr::Kind::Call)
+      return false;
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+    const FunctionInfo *fn = findFunction(expr.value);
+    if (!fn)
+    {
+      throw SemanticError("A rotina \"" + expr.value + "\" não existe.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    if (storeTarget && fn->returnType == Semantico::Type::VOID)
+    {
+      throw SemanticError("A rotina \"" + fn->name + "\" não retorna valor.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    if (storeTarget && fn->returnType != Semantico::Type::INT && fn->returnType != Semantico::Type::VOID)
+    {
+      throw SemanticError("Tipo de retorno incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+    const std::size_t expected = fn->params.size();
+    const std::size_t provided = expr.args.size();
+    if (expected != provided)
+    {
+      throw SemanticError("A função \"" + expr.value + "\" esperava " + std::to_string(expected) + " parâmetros e foram passados " + std::to_string(provided) + " parâmetros.", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+    }
+
+    ExpressionEmitter emitter(code, refPos);
+    emitter.reset();
+    for (std::size_t idx = 0; idx < fn->params.size(); ++idx)
+    {
+      if (fn->params[idx].type != Semantico::Type::INT)
+      {
+        throw SemanticError("Tipo de parâmetro incompatível na rotina \"" + fn->name + "\".", static_cast<int>(refPos), static_cast<int>(expr.value.size()));
+      }
+      std::string argTemp = emitter.emit(*expr.args[idx]);
+      const std::string paramAlias = parameterAlias(fn->lowerName, fn->params[idx].name);
+      code.push_back("LD " + argTemp);
+      code.push_back("STO " + paramAlias);
+    }
+
+    code.push_back("CALL " + fn->label);
+    if (storeTarget)
+    {
+      code.push_back("STO " + *storeTarget);
+    }
+    return true;
+  }
 
   bool emitIndexValue(const Expr &expr, std::vector<std::string> &code, ExpressionEmitter &emitter)
   {
@@ -820,7 +1668,8 @@ namespace
       }
       if (node.kind == Expr::Kind::Variable)
       {
-        code.push_back("LD " + node.value);
+        const std::string name = emitter.resolveSymbol(node.value);
+        code.push_back("LD " + name);
         return true;
       }
       return false;
@@ -877,7 +1726,8 @@ namespace
           }
           else
           {
-            code.push_back(std::string(positive ? "ADD " : "SUB ") + termExpr->value);
+            const std::string name = emitter.resolveSymbol(termExpr->value);
+            code.push_back(std::string(positive ? "ADD " : "SUB ") + name);
           }
         }
         if (firstPositive < 0)
@@ -904,7 +1754,8 @@ namespace
       return false;
     }
     code.push_back("STO $indr");
-    code.push_back("LDV " + expr.value);
+    const std::string name = emitter.resolveSymbol(expr.value);
+    code.push_back("LDV " + name);
     code.push_back("STO " + destination);
     return true;
   }
@@ -928,7 +1779,7 @@ namespace
     return false;
   }
 
-  bool emitOptimizedAddSub(const Expr &expr, const std::string &target, std::vector<std::string> &code)
+  bool emitOptimizedAddSub(const Expr &expr, const std::string &target, std::vector<std::string> &code, std::size_t refPos)
   {
     std::vector<std::pair<int, const Expr *>> terms;
     if (!collectAddSubTerms(expr, terms, 1))
@@ -948,7 +1799,7 @@ namespace
     if (firstIndex < 0)
       return false;
 
-    ExpressionEmitter emitter(code);
+    ExpressionEmitter emitter(code, refPos);
     emitter.reset();
     const std::string running = TEMP_VECTOR_VALUE;
     const std::string scratch = TEMP_VECTOR_VALUE_ALT;
@@ -963,7 +1814,8 @@ namespace
       }
       if (node->kind == Expr::Kind::Variable)
       {
-        code.push_back("LD " + node->value);
+        const std::string name = emitter.resolveSymbol(node->value);
+        code.push_back("LD " + name);
         code.push_back("STO " + dest);
         return true;
       }
@@ -989,8 +1841,9 @@ namespace
       }
       if (node->kind == Expr::Kind::Variable)
       {
+        const std::string name = emitter.resolveSymbol(node->value);
         code.push_back("LD " + running);
-        code.push_back(std::string(positive ? "ADD " : "SUB ") + node->value);
+        code.push_back(std::string(positive ? "ADD " : "SUB ") + name);
         code.push_back("STO " + running);
         return true;
       }
@@ -1030,14 +1883,15 @@ namespace
     return true;
   }
 
-  void generateReadIntoExpression(const Expr &expr, std::vector<std::string> &out)
+  void generateReadIntoExpression(const Expr &expr, std::vector<std::string> &out, std::size_t refPos)
   {
-    ExpressionEmitter emitter(out);
+    ExpressionEmitter emitter(out, refPos);
     emitter.reset();
     if (expr.kind == Expr::Kind::Variable)
     {
+      const std::string name = emitter.resolveSymbol(expr.value);
       out.push_back("LD $in_port");
-      out.push_back("STO " + expr.value);
+      out.push_back("STO " + name);
       return;
     }
     if (expr.kind == Expr::Kind::ArrayAccess && expr.index)
@@ -1049,7 +1903,8 @@ namespace
       }
       else if (expr.index->kind == Expr::Kind::Variable)
       {
-        out.push_back("LD " + expr.index->value);
+        const std::string name = emitter.resolveSymbol(expr.index->value);
+        out.push_back("LD " + name);
       }
       else
       {
@@ -1058,15 +1913,16 @@ namespace
       }
       out.push_back("STO $indr");
       out.push_back("LD $in_port");
-      out.push_back("STOV " + expr.value);
+      const std::string arrayName = emitter.resolveSymbol(expr.value);
+      out.push_back("STOV " + arrayName);
       return;
     }
     throw std::runtime_error("Destino inválido para leitura");
   }
 
-  void generatePrintExpression(const Expr &expr, std::vector<std::string> &out)
+  void generatePrintExpression(const Expr &expr, std::vector<std::string> &out, std::size_t refPos)
   {
-    ExpressionEmitter emitter(out);
+    ExpressionEmitter emitter(out, refPos);
     emitter.reset();
 
     auto emitArrayIndex = [&](const Expr &index) {
@@ -1078,7 +1934,8 @@ namespace
       }
       if (index.kind == Expr::Kind::Variable)
       {
-        out.push_back("LD " + index.value);
+        const std::string name = emitter.resolveSymbol(index.value);
+        out.push_back("LD " + name);
         return;
       }
       std::string indexTemp = emitter.emit(index);
@@ -1093,7 +1950,8 @@ namespace
       }
       emitArrayIndex(*expr.index);
       out.push_back("STO $indr");
-      out.push_back("LDV " + expr.value);
+      const std::string arrayName = emitter.resolveSymbol(expr.value);
+      out.push_back("LDV " + arrayName);
       out.push_back("STO $out_port");
       return;
     }
@@ -1108,12 +1966,235 @@ namespace
 
     if (expr.kind == Expr::Kind::Variable)
     {
-      out.push_back("LD " + expr.value);
+      const std::string name = emitter.resolveSymbol(expr.value);
+      out.push_back("LD " + name);
       out.push_back("STO $out_port");
       return;
     }
 
-    throw std::runtime_error("Expressão inválida para impressão");
+    // Demais expressões: avalia e imprime o resultado temporário
+    std::string temp = emitter.emit(expr);
+    out.push_back("LD " + temp);
+    out.push_back("STO $out_port");
+  }
+
+  struct RelationalParts
+  {
+    std::string left;
+    std::string op;
+    std::string right;
+  };
+
+  bool splitRelationalExpression(const std::string &exprText, RelationalParts &out)
+  {
+    int depthParen = 0;
+    int depthBracket = 0;
+    int depthBrace = 0;
+    bool inString = false;
+    char stringDelim = 0;
+    const std::size_t len = exprText.size();
+
+    for (std::size_t i = 0; i < len; ++i)
+    {
+      char c = exprText[i];
+      if (inString)
+      {
+        if (c == '\\' && i + 1 < len)
+        {
+          ++i;
+          continue;
+        }
+        if (c == stringDelim)
+        {
+          inString = false;
+        }
+        continue;
+      }
+      if (c == '"' || c == '\'')
+      {
+        inString = true;
+        stringDelim = c;
+        continue;
+      }
+      if (c == '(')
+      {
+        ++depthParen;
+        continue;
+      }
+      if (c == ')')
+      {
+        --depthParen;
+        continue;
+      }
+      if (c == '[')
+      {
+        ++depthBracket;
+        continue;
+      }
+      if (c == ']')
+      {
+        --depthBracket;
+        continue;
+      }
+      if (c == '{')
+      {
+        ++depthBrace;
+        continue;
+      }
+      if (c == '}')
+      {
+        --depthBrace;
+        continue;
+      }
+      if (depthParen || depthBracket || depthBrace)
+        continue;
+
+      if ((c == '<' || c == '>') && i + 1 < len && exprText[i + 1] == c)
+      {
+        ++i;
+        continue;
+      }
+
+      if (c == '<' || c == '>' || c == '!' || c == '=')
+      {
+        std::size_t opLen = 1;
+        std::string op(1, c);
+        if (i + 1 < len && exprText[i + 1] == '=')
+        {
+          opLen = 2;
+          op = exprText.substr(i, 2);
+        }
+        else if (c == '!' || c == '=')
+        {
+          continue;
+        }
+
+        std::size_t rightStart = i + opLen;
+        if ((op == "==" || op == "!=") && rightStart < len && exprText[rightStart] == '=')
+        {
+          ++rightStart; // trata === e !== como == e !=
+        }
+
+        out.left = trim(exprText.substr(0, i));
+        out.right = trim(exprText.substr(rightStart));
+        out.op = op;
+        return !out.left.empty() && !out.right.empty();
+      }
+    }
+
+    return false;
+  }
+
+  std::string branchOpcodeFor(const std::string &op, bool invert, bool preferStrictLess)
+  {
+    const std::string normalized = (op == "===") ? "==" : (op == "!==") ? "!=" : op;
+    if (!invert)
+    {
+      if (normalized == "<")
+        return "BLT";
+      if (normalized == ">")
+        return "BGT";
+      if (normalized == "<=")
+        return "BLE";
+      if (normalized == ">=")
+        return "BGE";
+      if (normalized == "==")
+        return "BEQ";
+      if (normalized == "!=")
+        return "BNE";
+    }
+    else
+    {
+      if (normalized == "<")
+        return preferStrictLess ? "BGT" : "BGE";
+      if (normalized == ">")
+        return "BLE";
+      if (normalized == "<=")
+        return "BGT";
+      if (normalized == ">=")
+        return "BLT";
+      if (normalized == "==")
+        return "BNE";
+      if (normalized == "!=")
+        return "BEQ";
+    }
+    throw std::runtime_error("Operador relacional não suportado: " + op);
+  }
+
+  std::vector<std::string> emitRelationalJump(const std::string &conditionText, const std::string &targetLabel, bool invert, std::size_t refPos, bool preferStrictLess = false)
+  {
+    RelationalParts parts;
+    if (!splitRelationalExpression(conditionText, parts))
+    {
+      return {};
+    }
+
+    std::vector<std::string> code;
+    try
+    {
+      auto leftExpr = parseExpressionString(parts.left);
+      auto rightExpr = parseExpressionString(parts.right);
+
+      ExpressionEmitter emitter(code, refPos);
+      emitter.reset();
+
+      auto emitIntoTemp = [&](const Expr &expr, const std::string &temp) {
+        if (expr.kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(expr.value);
+          code.push_back("LDI " + decimalValue);
+          code.push_back("STO " + temp);
+          return;
+        }
+        if (expr.kind == Expr::Kind::Variable)
+        {
+          const std::string name = emitter.resolveSymbol(expr.value);
+          code.push_back("LD " + name);
+          code.push_back("STO " + temp);
+          return;
+        }
+        if (expr.kind == Expr::Kind::ArrayAccess && expr.index)
+        {
+          std::vector<std::string> tmpCode;
+          emitArrayValueInto(expr, temp, tmpCode, emitter);
+          code.insert(code.end(), tmpCode.begin(), tmpCode.end());
+          return;
+        }
+        std::string tmp = emitter.emit(expr);
+        code.push_back("LD " + tmp);
+        code.push_back("STO " + temp);
+      };
+
+      emitIntoTemp(*leftExpr, TEMP_VECTOR_VALUE);
+      emitIntoTemp(*rightExpr, TEMP_VECTOR_VALUE_ALT);
+
+      code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
+      code.push_back(std::string("SUB ") + TEMP_VECTOR_VALUE_ALT);
+      const std::string opcode = branchOpcodeFor(parts.op, invert, preferStrictLess);
+      code.push_back(opcode + " " + targetLabel);
+    }
+    catch (const std::exception &)
+    {
+      code.clear();
+    }
+    return code;
+  }
+
+  void addStatementBlock(std::size_t position, std::vector<std::string> code)
+  {
+    if (code.empty())
+      return;
+    statementInstructions.emplace_back(position, std::move(code));
+  }
+
+  void removeBlocksInRange(std::size_t start, std::size_t end)
+  {
+    if (start > end)
+      return;
+    statementInstructions.erase(
+        std::remove_if(statementInstructions.begin(), statementInstructions.end(),
+                       [&](const auto &entry) { return entry.first >= start && entry.first <= end; }),
+        statementInstructions.end());
   }
 
   bool isIntegerLiteral(const std::string &lexeme)
@@ -1150,7 +2231,7 @@ namespace
 
     if (!variable.literalIsArray)
     {
-      return 1;
+      return DEFAULT_ARRAY_LENGTH;
     }
 
     std::size_t count = 0;
@@ -1235,15 +2316,598 @@ namespace
     return literal;
   }
 
-  void emitScalarStore(const std::string &name, const std::string &literal)
+  void emitScalarStore(const std::string &name, const std::string &literal, std::size_t position)
   {
     std::string decimalValue = convertLiteralToDecimal(literal);
-    instructions.push_back("LDI " + decimalValue);
-    instructions.push_back("STO " + name);
+    std::vector<std::string> code;
+    code.push_back("LDI " + decimalValue);
+    code.push_back("STO " + name);
+    // Se a posição não for válida, empurra para o final para não bagunçar fluxo
+    const std::size_t safePos = position == std::string::npos ? std::numeric_limits<std::size_t>::max() - 1 : position;
+    statementInstructions.emplace_back(safePos, std::move(code));
+  }
+
+  bool extractConditionAt(const std::string &src, std::size_t keywordPos, std::size_t keywordLen, std::string &condition, std::size_t &condOpen, std::size_t &condClose)
+  {
+    std::size_t pos = skipWhitespaceAndComments(src, keywordPos + keywordLen);
+    if (pos >= src.size() || src[pos] != '(')
+      return false;
+    condOpen = pos;
+    condClose = findMatchingParenthesis(src, condOpen);
+    if (condClose == std::string::npos)
+      return false;
+    condition = trim(src.substr(condOpen + 1, condClose - condOpen - 1));
+    return true;
+  }
+
+  bool extractBlockAfter(const std::string &src, std::size_t startPos, std::size_t &openBrace, std::size_t &closeBrace)
+  {
+    std::size_t pos = skipWhitespaceAndComments(src, startPos);
+    if (pos >= src.size() || src[pos] != '{')
+      return false;
+    openBrace = pos;
+    closeBrace = findMatchingBrace(src, openBrace);
+    return closeBrace != std::string::npos;
+  }
+
+  std::vector<std::string> generateUpdateInstructions(const std::string &updateText, std::size_t refPos)
+  {
+    std::string trimmed = trim(updateText);
+    if (trimmed.empty())
+      return {};
+
+    auto simpleIncrement = [&](const std::string &name, bool increment) {
+      std::vector<std::string> code;
+      const std::string alias = resolveAlias(name, refPos);
+      code.push_back("LD " + alias);
+      code.push_back(std::string(increment ? "ADDI " : "SUBI ") + "1");
+      code.push_back("STO " + alias);
+      return code;
+    };
+
+    if (trimmed.size() >= 2 && trimmed.substr(trimmed.size() - 2) == "++")
+    {
+      std::string name = trim(trimmed.substr(0, trimmed.size() - 2));
+      if (name.empty())
+        return {};
+      return simpleIncrement(name, true);
+    }
+    if (trimmed.size() >= 2 && trimmed.substr(trimmed.size() - 2) == "--")
+    {
+      std::string name = trim(trimmed.substr(0, trimmed.size() - 2));
+      if (name.empty())
+        return {};
+      return simpleIncrement(name, false);
+    }
+    if (trimmed.size() >= 2 && trimmed[0] == '+' && trimmed[1] == '+')
+    {
+      std::string name = trim(trimmed.substr(2));
+      if (name.empty())
+        return {};
+      return simpleIncrement(name, true);
+    }
+    if (trimmed.size() >= 2 && trimmed[0] == '-' && trimmed[1] == '-')
+    {
+      std::string name = trim(trimmed.substr(2));
+      if (name.empty())
+        return {};
+      return simpleIncrement(name, false);
+    }
+
+    int depthParen = 0;
+    int depthBracket = 0;
+    int depthBrace = 0;
+    std::size_t assignPos = std::string::npos;
+    for (std::size_t i = 0; i < trimmed.size(); ++i)
+    {
+      char c = trimmed[i];
+      if (c == '(')
+        ++depthParen;
+      else if (c == ')')
+        --depthParen;
+      else if (c == '[')
+        ++depthBracket;
+      else if (c == ']')
+        --depthBracket;
+      else if (c == '{')
+        ++depthBrace;
+      else if (c == '}')
+        --depthBrace;
+      if (depthParen || depthBracket || depthBrace)
+        continue;
+      if (c == '=')
+      {
+        if (i > 0 && (trimmed[i - 1] == '<' || trimmed[i - 1] == '>' || trimmed[i - 1] == '='))
+          continue;
+        if (i + 1 < trimmed.size() && trimmed[i + 1] == '=')
+          continue;
+        assignPos = i;
+        break;
+      }
+    }
+
+    if (assignPos == std::string::npos)
+      return {};
+
+    const std::string targetText = trim(trimmed.substr(0, assignPos));
+    const std::string rhsText = trim(trimmed.substr(assignPos + 1));
+    if (targetText.empty() || rhsText.empty())
+      return {};
+
+    std::vector<std::string> code;
+    try
+    {
+      bool targetIsArray = false;
+      std::unique_ptr<Expr> targetIndex;
+      std::string targetName = targetText;
+      std::size_t bracketPos = targetText.find('[');
+      if (bracketPos != std::string::npos)
+      {
+        std::size_t closeBracket = targetText.rfind(']');
+        if (closeBracket != std::string::npos && closeBracket > bracketPos)
+        {
+          targetIsArray = true;
+          targetName = trim(targetText.substr(0, bracketPos));
+          const std::string indexExprText = trim(targetText.substr(bracketPos + 1, closeBracket - bracketPos - 1));
+          if (!indexExprText.empty())
+          {
+            targetIndex = parseExpressionString(indexExprText);
+          }
+        }
+      }
+
+      auto rhsExpr = parseExpressionString(rhsText);
+      const std::string targetAlias = resolveAlias(targetName, refPos);
+
+      // Caminho otimizado: atualizações simples sem temporários extras.
+      auto isSimple = [](const Expr &expr) {
+        return expr.kind == Expr::Kind::Literal || expr.kind == Expr::Kind::Variable;
+      };
+      auto loadSimple = [&](const Expr &expr) -> void {
+        if (expr.kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(expr.value);
+          code.push_back("LDI " + decimalValue);
+        }
+        else if (expr.kind == Expr::Kind::Variable)
+        {
+          const std::string name = resolveAlias(expr.value, refPos);
+          code.push_back("LD " + name);
+        }
+      };
+
+      if (!targetIsArray)
+      {
+        if (rhsExpr->kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(rhsExpr->value);
+          code.push_back("LDI " + decimalValue);
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+        if (rhsExpr->kind == Expr::Kind::Variable)
+        {
+          const std::string srcName = resolveAlias(rhsExpr->value, refPos);
+          code.push_back("LD " + srcName);
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+        if (rhsExpr->kind == Expr::Kind::Binary && rhsExpr->left && rhsExpr->right &&
+            (rhsExpr->op == "+" || rhsExpr->op == "-") &&
+            isSimple(*rhsExpr->left) && isSimple(*rhsExpr->right))
+        {
+          loadSimple(*rhsExpr->left);
+
+          const Expr &rightNode = *rhsExpr->right;
+          if (rightNode.kind == Expr::Kind::Literal)
+          {
+            std::string decimalValue = convertLiteralToDecimal(rightNode.value);
+            code.push_back(std::string(rhsExpr->op == "+" ? "ADDI " : "SUBI ") + decimalValue);
+          }
+          else
+          {
+            const std::string name = resolveAlias(rightNode.value, refPos);
+            code.push_back(std::string(rhsExpr->op == "+" ? "ADD " : "SUB ") + name);
+          }
+
+          code.push_back("STO " + targetAlias);
+          return code;
+        }
+      }
+
+      // Caminho geral (usa temporários)
+      ExpressionEmitter emitter(code, refPos);
+      emitter.reset();
+      std::string valueTemp = emitter.emit(*rhsExpr);
+
+      if (targetIsArray && targetIndex)
+      {
+        std::string idxTemp = emitter.emit(*targetIndex);
+        code.push_back("LD " + idxTemp);
+        code.push_back(std::string("STO ") + TEMP_VECTOR_INDEX);
+        code.push_back("LD " + valueTemp);
+        code.push_back(std::string("STO ") + TEMP_VECTOR_VALUE);
+        code.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
+        code.push_back("STO $indr");
+        code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
+        code.push_back("STOV " + targetAlias);
+      }
+      else
+      {
+        code.push_back("LD " + valueTemp);
+        code.push_back("STO " + targetAlias);
+      }
+    }
+    catch (const std::exception &)
+    {
+      code.clear();
+    }
+    return code;
+  }
+
+  struct ForHeaderInfo
+  {
+    std::string conditionText;
+    std::string updateText;
+    std::size_t condStart = 0;
+    std::size_t condEnd = 0;
+    std::size_t updateStart = 0;
+    std::size_t updateEnd = 0;
+  };
+
+  bool parseForHeader(const std::string &src, std::size_t parenOpen, std::size_t parenClose, ForHeaderInfo &info)
+  {
+    if (parenOpen >= parenClose || parenClose >= src.size())
+      return false;
+    const std::size_t headerStart = parenOpen + 1;
+    const std::size_t headerLen = parenClose - parenOpen - 1;
+    const std::string header = src.substr(headerStart, headerLen);
+    int depth = 0;
+    std::size_t firstSemi = std::string::npos;
+    std::size_t secondSemi = std::string::npos;
+    for (std::size_t i = 0; i < header.size(); ++i)
+    {
+      char c = header[i];
+      if (c == '(')
+        ++depth;
+      else if (c == ')')
+        --depth;
+      else if (c == '[')
+        ++depth;
+      else if (c == ']')
+        --depth;
+      if (depth == 0 && c == ';')
+      {
+        if (firstSemi == std::string::npos)
+          firstSemi = i;
+        else
+        {
+          secondSemi = i;
+          break;
+        }
+      }
+    }
+    if (firstSemi == std::string::npos)
+      return false;
+    const std::size_t condStart = headerStart + firstSemi + 1;
+    const std::size_t condEnd = (secondSemi == std::string::npos) ? (parenClose - 1) : (headerStart + secondSemi - 1);
+    const std::size_t updateStart = (secondSemi == std::string::npos) ? condEnd : headerStart + secondSemi + 1;
+    const std::size_t updateEnd = parenClose - 1;
+
+    info.conditionText = trim(src.substr(condStart, condEnd - condStart + 1));
+    info.updateText = trim(src.substr(updateStart, updateEnd - updateStart + 1));
+    info.condStart = condStart;
+    info.condEnd = condEnd;
+    info.updateStart = updateStart;
+    info.updateEnd = updateEnd;
+    return true;
+  }
+
+  class ControlFlowGenerator
+  {
+  public:
+    explicit ControlFlowGenerator(const std::string &source) : src(source), limit(source.size()) {}
+
+    void parse(std::size_t start = 0, std::size_t end = std::string::npos)
+    {
+      if (end == std::string::npos || end > limit)
+        end = limit;
+      parseRange(start, end);
+    }
+
+  private:
+    const std::string &src;
+    const std::size_t limit;
+
+    void parseRange(std::size_t start, std::size_t end)
+    {
+      std::size_t pos = start;
+      while (pos < end)
+      {
+        pos = skipWhitespaceAndComments(src, pos);
+        if (pos >= end)
+          break;
+        if (isKeywordAt(src, pos, "if"))
+        {
+          if (parseIf(pos, end))
+            continue;
+        }
+        else if (isKeywordAt(src, pos, "while"))
+        {
+          if (parseWhile(pos, end))
+            continue;
+        }
+        else if (isKeywordAt(src, pos, "do"))
+        {
+          if (parseDoWhile(pos, end))
+            continue;
+        }
+        else if (isKeywordAt(src, pos, "for"))
+        {
+          if (parseFor(pos, end))
+            continue;
+        }
+        ++pos;
+      }
+    }
+
+    bool parseIf(std::size_t &pos, std::size_t end)
+    {
+      const std::size_t keywordPos = pos;
+      std::string condition;
+      std::size_t condOpen = 0;
+      std::size_t condClose = 0;
+      if (!extractConditionAt(src, keywordPos, 2, condition, condOpen, condClose))
+      {
+        ++pos;
+        return false;
+      }
+
+      std::size_t bodyOpen = 0;
+      std::size_t bodyClose = 0;
+      if (!extractBlockAfter(src, condClose + 1, bodyOpen, bodyClose) || bodyClose > end)
+      {
+        ++pos;
+        return false;
+      }
+
+      std::size_t afterBody = skipWhitespaceAndComments(src, bodyClose + 1);
+      bool hasElse = afterBody < end && isKeywordAt(src, afterBody, "else");
+      std::size_t elseOpen = std::string::npos;
+      std::size_t elseClose = std::string::npos;
+
+      if (hasElse)
+      {
+        std::size_t afterElse = skipWhitespaceAndComments(src, afterBody + 4);
+        if (!extractBlockAfter(src, afterElse, elseOpen, elseClose))
+        {
+          // else-if sem bloco explícito: tratamos como ausência de else
+          hasElse = false;
+        }
+      }
+
+      std::string falseLabel = nextLabel();
+      auto condInstr = emitRelationalJump(condition, falseLabel, true, condOpen);
+      if (!condInstr.empty())
+      {
+        addStatementBlock(keywordPos, std::move(condInstr));
+      }
+
+      parseRange(bodyOpen + 1, bodyClose);
+
+      if (!hasElse || elseOpen == std::string::npos || elseClose == std::string::npos)
+      {
+        addStatementBlock(bodyClose + 1, {falseLabel + ":"});
+        pos = bodyClose + 1;
+        return true;
+      }
+
+      std::string endLabel = nextLabel();
+      addStatementBlock(bodyClose, {"JMP " + endLabel});
+      addStatementBlock(elseOpen, {falseLabel + ":"});
+      parseRange(elseOpen + 1, elseClose);
+      addStatementBlock(elseClose + 1, {endLabel + ":"});
+      pos = elseClose + 1;
+      return true;
+    }
+
+    bool parseWhile(std::size_t &pos, std::size_t end)
+    {
+      const std::size_t keywordPos = pos;
+      std::string condition;
+      std::size_t condOpen = 0;
+      std::size_t condClose = 0;
+      if (!extractConditionAt(src, keywordPos, 5, condition, condOpen, condClose))
+      {
+        ++pos;
+        return false;
+      }
+
+      std::size_t bodyOpen = 0;
+      std::size_t bodyClose = 0;
+      if (!extractBlockAfter(src, condClose + 1, bodyOpen, bodyClose) || bodyClose > end)
+      {
+        ++pos;
+        return false;
+      }
+
+      std::string startLabel = nextLabel();
+      std::string endLabel = nextLabel();
+
+      addStatementBlock(keywordPos, {startLabel + ":"});
+      auto condInstr = emitRelationalJump(condition, endLabel, true, condOpen);
+      if (!condInstr.empty())
+      {
+        addStatementBlock(keywordPos + 1, std::move(condInstr));
+      }
+
+      parseRange(bodyOpen + 1, bodyClose);
+      // Mantém o salto de repetição colado ao fechamento do bloco,
+      // seguido imediatamente pelo rótulo de saída, para evitar que
+      // instruções após o while caiam entre o JMP e o label.
+      addStatementBlock(bodyClose, {"JMP " + startLabel});
+      addStatementBlock(bodyClose, {endLabel + ":"});
+      pos = bodyClose + 1;
+      return true;
+    }
+
+    bool parseDoWhile(std::size_t &pos, std::size_t end)
+    {
+      const std::size_t keywordPos = pos;
+      std::size_t blockOpen = 0;
+      std::size_t blockClose = 0;
+      std::size_t afterDo = skipWhitespaceAndComments(src, keywordPos + 2);
+      if (!extractBlockAfter(src, afterDo, blockOpen, blockClose) || blockClose > end)
+      {
+        ++pos;
+        return false;
+      }
+
+      std::string startLabel = nextLabel();
+      addStatementBlock(keywordPos, {startLabel + ":"});
+      parseRange(blockOpen + 1, blockClose);
+
+      std::size_t afterBlock = skipWhitespaceAndComments(src, blockClose + 1);
+      if (afterBlock >= end || !isKeywordAt(src, afterBlock, "while"))
+      {
+        pos = blockClose + 1;
+        return true;
+      }
+
+      std::string condition;
+      std::size_t condOpen = 0;
+      std::size_t condClose = 0;
+      if (!extractConditionAt(src, afterBlock, 5, condition, condOpen, condClose))
+      {
+        pos = blockClose + 1;
+        return true;
+      }
+
+      auto condInstr = emitRelationalJump(condition, startLabel, false, condOpen);
+      if (!condInstr.empty())
+      {
+        addStatementBlock(afterBlock, std::move(condInstr));
+      }
+
+      pos = condClose + 1;
+      pos = skipWhitespaceAndComments(src, pos);
+      if (pos < end && src[pos] == ';')
+        ++pos;
+      return true;
+    }
+
+    bool parseFor(std::size_t &pos, std::size_t end)
+    {
+      const std::size_t keywordPos = pos;
+      std::size_t parenOpen = skipWhitespaceAndComments(src, keywordPos + 3);
+      if (parenOpen >= end || src[parenOpen] != '(')
+      {
+        ++pos;
+        return false;
+      }
+      std::size_t parenClose = findMatchingParenthesis(src, parenOpen);
+      if (parenClose == std::string::npos || parenClose > end)
+      {
+        ++pos;
+        return false;
+      }
+
+      ForHeaderInfo header;
+      if (!parseForHeader(src, parenOpen, parenClose, header))
+      {
+        ++pos;
+        return false;
+      }
+
+      std::size_t bodyOpen = 0;
+      std::size_t bodyClose = 0;
+      if (!extractBlockAfter(src, parenClose + 1, bodyOpen, bodyClose) || bodyClose > end)
+      {
+        ++pos;
+        return false;
+      }
+
+      std::string startLabel = nextLabel();
+      std::string endLabel = nextLabel();
+
+      addStatementBlock(header.condStart, {startLabel + ":"});
+      if (!header.conditionText.empty())
+      {
+        auto condInstr = emitRelationalJump(header.conditionText, endLabel, true, header.condStart, true);
+        if (!condInstr.empty())
+        {
+          addStatementBlock(header.condStart + 1, std::move(condInstr));
+        }
+      }
+
+      parseRange(bodyOpen + 1, bodyClose);
+
+      removeBlocksInRange(header.updateStart, header.updateEnd);
+      auto updateInstr = generateUpdateInstructions(header.updateText, header.updateStart);
+      if (!updateInstr.empty())
+      {
+        const std::size_t updatePos = bodyClose > 0 ? bodyClose - 1 : bodyClose;
+        addStatementBlock(updatePos, std::move(updateInstr));
+      }
+
+      addStatementBlock(bodyClose, {"JMP " + startLabel});
+      addStatementBlock(bodyClose + 1, {endLabel + ":"});
+      pos = bodyClose + 1;
+      return true;
+    }
+  };
+
+  void generateControlFlow()
+  {
+    if (controlFlowGenerated)
+      return;
+    controlFlowGenerated = true;
+    ControlFlowGenerator parser(Semantico::sourceCode);
+    parser.parse();
   }
 
   std::string buildCode()
   {
+    ensureFunctionsParsed();
+    ensureParametersRegistered();
+
+    std::unordered_map<std::string, std::vector<std::pair<std::size_t, std::vector<std::string>>>> grouped;
+    for (const auto &stmt : statementInstructions)
+    {
+      const std::string fn = functionForPosition(stmt.first);
+      grouped[fn].push_back(stmt);
+    }
+
+    auto emitInstructionBlocks = [&](const std::vector<std::pair<std::size_t, std::vector<std::string>>> &blocks, std::ostringstream &os) {
+      if (blocks.empty())
+        return;
+      auto sorted = blocks;
+      std::stable_sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
+        if (a.first != b.first)
+          return a.first < b.first;
+        const bool aLabel = !a.second.empty() && !a.second.front().empty() && a.second.front().back() == ':';
+        const bool bLabel = !b.second.empty() && !b.second.front().empty() && b.second.front().back() == ':';
+        if (aLabel != bLabel)
+          return aLabel && !bLabel;
+        return false;
+      });
+      for (const auto &blk : sorted)
+      {
+        for (const auto &instr : blk.second)
+        {
+          const bool isLabel = !instr.empty() && instr.back() == ':';
+          if (isLabel)
+          {
+            os << instr << "\n";
+          }
+          else
+          {
+            os << "    " << instr << "\n";
+          }
+        }
+      }
+    };
+
     std::ostringstream out;
     out << ".data\n";
     for (const auto &entry : entries)
@@ -1274,27 +2938,32 @@ namespace
       }
       out << "\n";
     }
-    std::vector<std::string> textInstructions = instructions;
-    std::sort(statementInstructions.begin(), statementInstructions.end(),
-              [](const auto &a, const auto &b) { return a.first < b.first; });
-    for (const auto &stmt : statementInstructions)
+    out << ".text\n";
+    out << "    JMP _PRINCIPAL\n";
+
+    auto sortedFunctions = functions;
+    std::sort(sortedFunctions.begin(), sortedFunctions.end(), [](const FunctionInfo &a, const FunctionInfo &b) {
+      return a.headerStart < b.headerStart;
+    });
+
+    for (const auto &fn : sortedFunctions)
     {
-      textInstructions.insert(textInstructions.end(), stmt.second.begin(), stmt.second.end());
+      out << fn.label << ":\n";
+      const auto it = grouped.find(fn.lowerName);
+      if (it != grouped.end())
+      {
+        emitInstructionBlocks(it->second, out);
+      }
+      // Garante retorno apenas se não houver return explícito
+      if (!functionsWithReturn.count(fn.lowerName))
+      {
+        out << "    RETURN 0\n";
+      }
     }
 
-    out << ".text\n";
-    if (textInstructions.empty())
-    {
-      out << "  HLT 0\n";
-    }
-    else
-    {
-      for (const auto &instr : textInstructions)
-      {
-        out << "  " << instr << "\n";
-      }
-      out << "  HLT 0\n";
-    }
+    out << "_PRINCIPAL:\n";
+    emitInstructionBlocks(grouped[""], out);
+    out << "  HLT 0\n";
 
     return out.str();
   }
@@ -1307,9 +2976,18 @@ namespace BipGenerator
   {
     entries.clear();
     cachedCode.clear();
-    instructions.clear();
     statementInstructions.clear();
     readStatementsScanned = false;
+    controlFlowGenerated = false;
+    labelCounter = 1;
+    aliasEntries.clear();
+    aliasCounters.clear();
+    seenPrints.clear();
+    functions.clear();
+    parameterAliasMap.clear();
+    functionsParsed = false;
+    parametersRegistered = false;
+    functionsWithReturn.clear();
   }
 
   void registerDeclaration(const Semantico::Variable &variable)
@@ -1323,8 +3001,11 @@ namespace BipGenerator
       return;
     }
 
+    const std::size_t declPos = variable.position >= 0 ? static_cast<std::size_t>(variable.position) : 0;
+    const std::string alias = registerAlias(variable.name, static_cast<int>(declPos));
+
     Entry entry;
-    entry.name = variable.name;
+    entry.name = alias;
     entry.isArray = variable.isArray;
     entry.elementCount = entry.isArray ? inferArrayLength(variable) : 1;
     
@@ -1353,24 +3034,31 @@ namespace BipGenerator
     entries.push_back(std::move(entry));
     Entry &current = entries.back();
     
-    // Inicialização de arrays com valores literais
+    // Inicialização de arrays com valores literais (inserida na posição da declaração)
     if (current.isArray && !current.literalValues.empty())
     {
       const std::size_t count = current.literalValues.size();
       current.elementCount = count;
+      std::vector<std::string> code;
       for (std::size_t idx = 0; idx < count; ++idx)
       {
-        instructions.push_back("LDI " + std::to_string(static_cast<int>(idx)));
-        instructions.push_back("STO $indr");
-        instructions.push_back("LDI " + current.literalValues[idx]);
-        instructions.push_back("STOV " + current.name);
+        code.push_back("LDI " + std::to_string(static_cast<int>(idx)));
+        code.push_back("STO $indr");
+        code.push_back("LDI " + current.literalValues[idx]);
+        code.push_back("STOV " + current.name);
+      }
+      if (!code.empty())
+      {
+        statementInstructions.emplace_back(declPos, std::move(code));
       }
     }
     // Inicialização de variável escalar com literal simples
     else if (!current.isArray && current.hasInitializer && !current.literalValues.empty())
     {
-      instructions.push_back("LDI " + current.literalValues.front());
-      instructions.push_back("STO " + current.name);
+      std::vector<std::string> code;
+      code.push_back("LDI " + current.literalValues.front());
+      code.push_back("STO " + current.name);
+      statementInstructions.emplace_back(declPos, std::move(code));
     }
     // Se tem inicialização mas não é literal simples, tenta processar como atribuição
     else if (!current.isArray && variable.isInitialized && !hasSimpleLiteral)
@@ -1397,7 +3085,9 @@ namespace BipGenerator
           std::string literal = extractScalarLiteral(variable);
           if (!literal.empty())
           {
-            emitScalarStore(variable.name, literal);
+            const std::size_t refPos = variable.position >= 0 ? static_cast<std::size_t>(variable.position) : 0;
+            const std::string alias = resolveAlias(variable.name, refPos);
+            emitScalarStore(alias, literal, refPos);
           }
         }
         return;
@@ -1410,7 +3100,9 @@ namespace BipGenerator
         std::string literal = extractScalarLiteral(variable);
         if (!literal.empty())
         {
-          emitScalarStore(variable.name, literal);
+          const std::size_t refPos = variable.position >= 0 ? static_cast<std::size_t>(variable.position) : 0;
+          const std::string alias = resolveAlias(variable.name, refPos);
+          emitScalarStore(alias, literal, refPos);
         }
       }
       return;
@@ -1419,6 +3111,8 @@ namespace BipGenerator
     try
     {
       std::vector<std::string> code;
+      const std::size_t refPos = parsed.statementStart;
+      const std::string targetAlias = resolveAlias(parsed.targetName, refPos);
 
       if (!parsed.targetIsArray && parsed.rhsExpr)
       {
@@ -1437,30 +3131,41 @@ namespace BipGenerator
           }
           else if (expr.index->kind == Expr::Kind::Variable)
           {
-            direct.push_back("LD " + expr.index->value);
+            const std::string name = resolveAlias(expr.index->value, refPos);
+            direct.push_back("LD " + name);
           }
           if (!direct.empty())
           {
             direct.push_back("STO $indr");
-            direct.push_back("LDV " + expr.value);
-            direct.push_back("STO " + parsed.targetName);
+            const std::string arrayName = resolveAlias(expr.value, refPos);
+            direct.push_back("LDV " + arrayName);
+            direct.push_back("STO " + targetAlias);
             emitAndStore(std::move(direct));
             return;
           }
+        }
+
+        if (expr.kind == Expr::Kind::Call)
+        {
+          std::vector<std::string> callCode;
+          emitCallForContext(expr, refPos, callCode, &targetAlias);
+          emitAndStore(std::move(callCode));
+          return;
         }
 
         if (expr.kind == Expr::Kind::Literal)
         {
           std::string decimalValue = convertLiteralToDecimal(expr.value);
           code.push_back("LDI " + decimalValue);
-          code.push_back("STO " + parsed.targetName);
+          code.push_back("STO " + targetAlias);
           emitAndStore(std::move(code));
           return;
         }
         if (expr.kind == Expr::Kind::Variable)
         {
-          code.push_back("LD " + expr.value);
-          code.push_back("STO " + parsed.targetName);
+          const std::string name = resolveAlias(expr.value, refPos);
+          code.push_back("LD " + name);
+          code.push_back("STO " + targetAlias);
           emitAndStore(std::move(code));
           return;
         }
@@ -1482,7 +3187,8 @@ namespace BipGenerator
             }
             else
             {
-              code.push_back("LD " + expr.left->value);
+              const std::string name = resolveAlias(expr.left->value, refPos);
+              code.push_back("LD " + name);
             }
             
             // Aplica operação com operando direito
@@ -1496,7 +3202,8 @@ namespace BipGenerator
               }
               else
               {
-                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+                const std::string name = resolveAlias(expr.right->value, refPos);
+                code.push_back(opcodeForOperator(expr.op) + " " + name);
               }
             }
             else if (expr.op == "&" || expr.op == "|" || expr.op == "^")
@@ -1509,7 +3216,8 @@ namespace BipGenerator
               }
               else
               {
-                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+                const std::string name = resolveAlias(expr.right->value, refPos);
+                code.push_back(opcodeForOperator(expr.op) + " " + name);
               }
             }
             else
@@ -1522,24 +3230,25 @@ namespace BipGenerator
               }
               else
               {
-                code.push_back(opcodeForOperator(expr.op) + " " + expr.right->value);
+                const std::string name = resolveAlias(expr.right->value, refPos);
+                code.push_back(opcodeForOperator(expr.op) + " " + name);
               }
             }
             
-            code.push_back("STO " + parsed.targetName);
+            code.push_back("STO " + targetAlias);
             emitAndStore(std::move(code));
             return;
           }
         }
         
-        if (emitOptimizedAddSub(expr, parsed.targetName, code))
+        if (emitOptimizedAddSub(expr, targetAlias, code, refPos))
         {
           emitAndStore(std::move(code));
           return;
         }
       }
 
-      ExpressionEmitter emitter(code);
+      ExpressionEmitter emitter(code, refPos);
       emitter.reset();
       bool symbolIsArray = variable.isArray;
 
@@ -1558,7 +3267,7 @@ namespace BipGenerator
           code.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
           code.push_back("STO $indr");
           code.push_back("LD " + elementTemp);
-          code.push_back("STOV " + parsed.targetName);
+          code.push_back("STOV " + targetAlias);
         }
         statementInstructions.emplace_back(parsed.statementStart, std::move(code));
         return;
@@ -1587,13 +3296,13 @@ namespace BipGenerator
         code.push_back(std::string("LD ") + TEMP_VECTOR_INDEX);
         code.push_back("STO $indr");
         code.push_back(std::string("LD ") + TEMP_VECTOR_VALUE);
-        code.push_back("STOV " + parsed.targetName);
+        code.push_back("STOV " + targetAlias);
       }
       else
       {
         std::string valueTemp = emitter.emit(*parsed.rhsExpr);
         code.push_back("LD " + valueTemp);
-        code.push_back("STO " + parsed.targetName);
+        code.push_back("STO " + targetAlias);
       }
 
       statementInstructions.emplace_back(parsed.statementStart, std::move(code));
@@ -1615,7 +3324,7 @@ namespace BipGenerator
     {
       std::vector<std::string> code;
       auto expr = parseExpressionString(argument);
-      generateReadIntoExpression(*expr, code);
+      generateReadIntoExpression(*expr, code, position);
       statementInstructions.emplace_back(position, std::move(code));
     }
     catch (const std::exception &)
@@ -1626,16 +3335,32 @@ namespace BipGenerator
 
   void registerPrintStatement(std::size_t position, const std::string &expression)
   {
-    for (const auto &entry : statementInstructions)
-    {
-      if (entry.first == position)
-        return;
-    }
+    const std::string key = std::to_string(position) + ":" + expression;
+    if (seenPrints.count(key))
+      return;
+    seenPrints.insert(key);
     try
     {
       std::vector<std::string> code;
       auto expr = parseExpressionString(expression);
-      generatePrintExpression(*expr, code);
+      generatePrintExpression(*expr, code, position);
+      auto sameBlock = [&](const std::vector<std::string> &other) {
+        if (other.size() != code.size())
+          return false;
+        for (std::size_t i = 0; i < code.size(); ++i)
+        {
+          if (code[i] != other[i])
+            return false;
+        }
+        return true;
+      };
+      for (const auto &entry : statementInstructions)
+      {
+        if (entry.first == position && sameBlock(entry.second))
+        {
+          return;
+        }
+      }
       statementInstructions.emplace_back(position, std::move(code));
     }
     catch (const std::exception &)
@@ -1676,9 +3401,190 @@ namespace BipGenerator
     }
   }
 
+  void registerReturnStatement(std::size_t position, const std::string &expression)
+  {
+    ensureFunctionsParsed();
+    const std::string funcName = functionForPosition(position);
+    if (funcName.empty())
+      return;
+    const FunctionInfo *fn = findFunction(funcName);
+    if (!fn)
+      return;
+
+    try
+    {
+      std::vector<std::string> code;
+      ExpressionEmitter emitter(code, position);
+      emitter.reset();
+      std::string exprText = trim(expression);
+      if (!exprText.empty())
+      {
+        auto exprNode = parseExpressionString(exprText);
+        if (fn->returnType == Semantico::Type::VOID)
+        {
+          throw SemanticError("Retorno com valor em procedimento \"" + fn->name + "\".", static_cast<int>(position), static_cast<int>(fn->name.size()));
+        }
+        if (fn->returnType != Semantico::Type::INT)
+        {
+          throw SemanticError("Tipo de retorno incompatível na função \"" + fn->name + "\".", static_cast<int>(position), static_cast<int>(fn->name.size()));
+        }
+        if (exprNode->kind == Expr::Kind::Call)
+        {
+          emitCallForContext(*exprNode, position, code, nullptr);
+        }
+        else if (exprNode->kind == Expr::Kind::Literal)
+        {
+          std::string decimalValue = convertLiteralToDecimal(exprNode->value);
+          code.push_back("LDI " + decimalValue);
+        }
+        else if (exprNode->kind == Expr::Kind::Variable)
+        {
+          const std::string name = emitter.resolveSymbol(exprNode->value);
+          code.push_back("LD " + name);
+        }
+        else
+        {
+          std::string valueTemp = emitter.emit(*exprNode);
+          code.push_back("LD " + valueTemp);
+        }
+      }
+      else
+      {
+        code.push_back("LDI 0");
+      }
+      code.push_back("RETURN 0");
+      statementInstructions.emplace_back(position, std::move(code));
+      functionsWithReturn.insert(funcName);
+    }
+    catch (const std::exception &)
+    {
+      // ignora returns inválidos
+    }
+  }
+
+  void scanReturnStatements()
+  {
+    const std::string &src = Semantico::sourceCode;
+    const std::string keyword = "return";
+    const std::size_t len = src.size();
+
+    for (std::size_t i = 0; i + keyword.size() <= len; ++i)
+    {
+      if (!isKeywordAt(src, i, keyword))
+        continue;
+      std::size_t exprStart = skipWhitespaceAndComments(src, i + keyword.size());
+      int depthParen = 0;
+      int depthBracket = 0;
+      int depthBrace = 0;
+      std::size_t end = exprStart;
+      for (; end < len; ++end)
+      {
+        char c = src[end];
+        if (c == ';' && depthParen == 0 && depthBracket == 0 && depthBrace == 0)
+          break;
+        if (c == '(')
+          ++depthParen;
+        else if (c == ')')
+          --depthParen;
+        else if (c == '[')
+          ++depthBracket;
+        else if (c == ']')
+          --depthBracket;
+        else if (c == '{')
+          ++depthBrace;
+        else if (c == '}')
+          --depthBrace;
+      }
+      if (end >= len || src[end] != ';')
+        continue;
+      std::string exprText;
+      if (end > exprStart)
+      {
+        exprText = trim(src.substr(exprStart, end - exprStart));
+      }
+      registerReturnStatement(i, exprText);
+      i = end;
+    }
+  }
+
+  bool isStandaloneCallCandidate(const std::string &identifier)
+  {
+    static const std::unordered_set<std::string> keywords = {"if", "else", "for", "while", "do", "function", "return", "switch", "case", "print", "read"};
+    return !keywords.count(identifier);
+  }
+
+  void scanCallStatements()
+  {
+    const std::string &src = Semantico::sourceCode;
+    const std::size_t len = src.size();
+
+    for (std::size_t i = 0; i < len; ++i)
+    {
+      char c = src[i];
+      if (!isIdentifierStart(c))
+        continue;
+      if (i > 0 && isIdentifierChar(src[i - 1]))
+        continue;
+      std::size_t nameEnd = i + 1;
+      while (nameEnd < len && isIdentifierChar(src[nameEnd]))
+        ++nameEnd;
+      std::string ident = src.substr(i, nameEnd - i);
+      if (!isStandaloneCallCandidate(ident))
+      {
+        i = nameEnd > 0 ? nameEnd - 1 : i;
+        continue;
+      }
+      std::size_t afterName = skipWhitespaceAndComments(src, nameEnd);
+      if (afterName >= len || src[afterName] != '(')
+        continue;
+      std::size_t parenClose = findMatchingParenthesis(src, afterName);
+      if (parenClose == std::string::npos)
+        continue;
+      std::size_t afterCall = skipWhitespaceAndComments(src, parenClose + 1);
+      if (afterCall >= len || src[afterCall] != ';')
+        continue;
+
+      // garante que não é parte de uma atribuição ou expressão maior
+      std::size_t scan = i;
+      while (scan > 0 && std::isspace(static_cast<unsigned char>(src[scan - 1])))
+        --scan;
+      if (scan > 0)
+      {
+        char prev = src[scan - 1];
+        if (prev != ';' && prev != '{' && prev != '}' && prev != '\n')
+        {
+          continue;
+        }
+      }
+
+      const std::string callText = trim(src.substr(i, parenClose - i + 1));
+      try
+      {
+        std::vector<std::string> code;
+        ExpressionEmitter emitter(code, i, false);
+        emitter.reset();
+        auto expr = parseExpressionString(callText);
+        if (expr && expr->kind == Expr::Kind::Call)
+        {
+          emitter.emit(*expr);
+          statementInstructions.emplace_back(i, std::move(code));
+        }
+      }
+      catch (const std::exception &)
+      {
+        // ignora chamadas inválidas
+      }
+      i = afterCall;
+    }
+  }
+
   std::string render()
   {
+    generateControlFlow();
     scanReadStatements();
+    scanReturnStatements();
+    scanCallStatements();
+    ensureParametersRegistered();
     cachedCode = buildCode();
     return cachedCode;
   }
