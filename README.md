@@ -1,29 +1,19 @@
-# Uniscript
+# Uniscript Web
 
+Interface web da linguagem Uniscript, compilando o núcleo C++ para WebAssembly e servindo em uma aplicação React/Vite. Projeto criado na disciplina de Compiladores por [Daniel Sansão Araldi](https://github.com/DanielAraldi), [Rafael Mota Alves](https://github.com/RafaelMotaAlvess) e [Nilson Neto](https://github.com/NilsonAndradeNeto).
 
-Uma linguagem de programação simples, prática e única. Essa linguagem de programação surge na matéria de compiladores, criada pelos alunos [Daniel Sansão Araldi](https://github.com/DanielAraldi), [Rafael Mota Alves](https://github.com/RafaelMotaAlvess) e [Nilson Neto](https://github.com/NilsonAndradeNeto).
+## Requisitos
+- Node.js 18+
+- Emscripten (`emcc`) instalado ou Docker (usado como fallback para gerar o WASM)
 
-## Como executar
-
-- CLI rápida:
-  - Compilar: `make`
-  - Rodar: `make run`
-  - Script direto (compila e executa): `./scripts/compile-main.sh [args...]`
-
-## IDE Web (React + WASM)
-
-Interface web client-side em `web/`, compilando o núcleo C++ para WebAssembly.
-
-Uso via npm:
-
-- Preparar (WASM + deps): `npm run setup`
-- Desenvolvimento: `npm run dev`
-- Build produção: `npm run build`
-- Preview: `npm run preview`
-
-
-#### Problemas
-
-- [ ] Não ta impedindo criação de variavel com o mesmo nome.
-- [ ] Tem que encerrar a execução caso o erro seja encontrado? ou comentar todos os warnings quero ideias. 
-- [ ] implementar os bereguenaite de for, acho que precisa, boa noite.
+## Passo a passo
+1. Preparar (gerar WASM + instalar deps do frontend):
+   ```bash
+   npm run setup
+   ```
+   - Usa `emcc` se estiver disponível; caso contrário, tenta Docker.
+   - Gera `web/public/uniscript.js` e `web/public/uniscript.wasm`.
+2. Ambiente de desenvolvimento (Vite):
+   ```bash
+   npm run dev
+   ```
