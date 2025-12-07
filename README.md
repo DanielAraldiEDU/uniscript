@@ -17,3 +17,5 @@ Interface web da linguagem Uniscript, compilando o núcleo C++ para WebAssembly 
    ```bash
    npm run dev
    ```
+3. Acessar:
+   - Abrir `http://localhost:5173` no navegador.
