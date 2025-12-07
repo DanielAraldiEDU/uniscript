@@ -14,6 +14,7 @@ TARGET := $(BIN_DIR)/uniscript
 # Source files
 SRCS := \
   $(SRC_DIR)/main.cpp \
+  $(SRC_DIR)/CompatibilityTable.cpp \
   $(wildcard $(SRC_DIR)/gals/*.cpp)
 
 # Object files mapped to build directory, preserving tree
@@ -27,14 +28,9 @@ $(TARGET): $(OBJS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
 
 # Pattern rule to compile .cpp to .o under build directory
-
-# Try to detect Qt6 or Qt5 Widgets via pkg-config (optional)
-QT_CFLAGS := $(shell pkg-config --cflags Qt6Widgets 2>/dev/null || pkg-config --cflags Qt5Widgets 2>/dev/null)
-QT_LIBS   := $(shell pkg-config --libs   Qt6Widgets 2>/dev/null || pkg-config --libs   Qt5Widgets 2>/dev/null)
-
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(QT_CFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # Ensure output directories exist
 $(BIN_DIR):
@@ -43,41 +39,12 @@ $(BIN_DIR):
 $(OBJ_DIR):
 	@mkdir -p $@
 
-# Convenience target to build and run
+# Convenience target to build and execute the CLI quickly
 run: $(TARGET)
 	$(TARGET)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
-
-# -----------------
-# gui
-# -----------------
-
-GUI_TARGET := $(BIN_DIR)/uniscript-gui
-GUI_SRCS := \
-  $(SRC_DIR)/gui/main.cpp \
-  $(SRC_DIR)/gui/MainWindow.cpp \
-  $(wildcard $(SRC_DIR)/gui/components/Header/*.cpp) \
-  $(wildcard $(SRC_DIR)/gui/components/Editor/*.cpp) \
-  $(wildcard $(SRC_DIR)/gui/components/Console/*.cpp) \
-  $(wildcard $(SRC_DIR)/gals/*.cpp)
-GUI_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(GUI_SRCS))
-
-.PHONY: gui run-gui
-
-gui: $(GUI_TARGET)
-
-$(GUI_TARGET): $(GUI_OBJS) | $(BIN_DIR)
-	@if [ -z "$(QT_LIBS)" ]; then \
-	  echo "\n[!] Qt Widgets não encontrado via pkg-config (Qt6/Qt5)."; \
-	  echo "    Instale Qt dev e pkg-config, ou ajuste QT_CFLAGS/QT_LIBS no Makefile."; \
-	  exit 1; \
-	fi
-	$(CXX) $(CXXFLAGS) -o $@ $(GUI_OBJS) $(QT_LIBS)
-
-run-gui: $(GUI_TARGET)
-	$(GUI_TARGET)
 
 .PHONY: docker-build docker-artifacts wasm-docker
 
