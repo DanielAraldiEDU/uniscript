@@ -19,3 +19,41 @@ Interface web da linguagem Uniscript, compilando o núcleo C++ para WebAssembly 
    ```
 3. Acessar:
    - Abrir `http://localhost:5173` no navegador.
+
+
+---
+
+## Codigos para testar:
+
+```
+var a: int = 0;
+
+for(var i: int = 0; i < 10; i++){
+   for(var j: int = 0; j < 5; j++){
+      a = a + i + j;
+      print(a);
+   } 
+}
+```
+
+```
+const a: int = 5; 
+const b: int[] = [1,2,3,4];
+
+var c: int;
+
+if(a <= b[2]){
+    c = a + b[1];
+} else {
+    c = b[0] + a;
+}
+```
+
+```
+function soma(a: int, b: int): int {
+    return a + b;
+}
+
+const c: int = soma(1, 2);
+// const d: int = soma(1, 2, 3);  esse tem que dar erro por passar 3 parametros
+```
